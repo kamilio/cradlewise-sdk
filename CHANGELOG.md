@@ -22,6 +22,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Restrict inherited locale variables to the standard `LC_*` names so locale-shaped secret variables cannot cross reviewed subprocess boundaries.
 - Include permission mode in verified Homey file and directory identity checks so mode changes during inspection invalidate the artifact.
 - Allow Homey pairing and repair to authenticate and discover account cribs while live crib telemetry is offline, and distinguish invalid credentials from configuration, timeout, and post-login discovery failures.
+- Keep generic authentication transport failures distinct from rejected credentials so Homey suggests checking connectivity instead of reporting a false password error.
 - Add bounded `/inbox/v2` photo discovery and a Homey Advanced Flow image token that remains usable when the crib itself is offline.
 
 ### Added
