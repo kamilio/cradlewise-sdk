@@ -29,6 +29,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Select the latest saved crib photo by validated message timestamp instead of relying solely on inbox response order.
 - Enforce Homey's documented 5 MB image limit as exactly 5,000,000 bytes rather than the larger 5 MiB binary unit.
 - Strip upstream media-fetch causes from Homey photo failures so signed temporary URLs cannot leak through diagnostics.
+- Validate JPEG, PNG, and WebP byte signatures before exposing downloaded media to Homey, and keep oversize errors deterministic when stream cancellation fails.
 - Add bounded `/inbox/v2` photo discovery and a Homey Advanced Flow image token that remains usable when the crib itself is offline.
 
 ### Added
