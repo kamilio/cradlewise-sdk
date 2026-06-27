@@ -68,6 +68,21 @@ describe("package metadata", () => {
     ]) {
       expect(gitignore.split(/\r?\n/u)).toContain(path);
     }
+    for (const path of [
+      "*.apk",
+      "*.APK",
+      "*.aab",
+      "*.AAB",
+      "*.apks",
+      "*.APKS",
+      "*.xapk",
+      "*.XAPK",
+      "*.dex",
+      "*.DEX",
+      "jadx-output",
+    ]) {
+      expect(homeyignore.split(/\r?\n/u)).toContain(path);
+    }
   });
 
   it("keeps runtime identity synchronized with package.json", async () => {
