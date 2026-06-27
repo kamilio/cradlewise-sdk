@@ -2660,4 +2660,37 @@ describe("CradlewiseClient", () => {
       "pageSize",
     );
   });
+
+  it("selects the newest timestamped crib photo deterministically", async () => {
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        jsonResponse({
+          baby_notifications: [
+            {
+              message_id: 1,
+              message_time: "2026-07-04T12:00:00Z",
+              content_type: "image",
+              content_url: "https://private.cradlewise.com/older.jpg",
+            },
+            {
+              message_id: 2,
+              message_time: "not-a-time",
+              thumbnail_url: "https://private.cradlewise.com/unknown.jpg",
+            },
+            {
+              message_id: 3,
+              message_time: "2026-07-05T12:00:00Z",
+              thumbnail_url: "https://private.cradlewise.com/newer.jpg",
+            },
+          ],
+        }),
+      ),
+    });
+
+    await expect(client.getLatestCribPhoto("crib", "baby")).resolves.toEqual({
+      url: "https://private.cradlewise.com/newer.jpg",
+      messageId: 3,
+      messageTime: "2026-07-05T12:00:00Z",
+    });
+  });
 });

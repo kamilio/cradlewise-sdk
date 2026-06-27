@@ -23,6 +23,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Include permission mode in verified Homey file and directory identity checks so mode changes during inspection invalidate the artifact.
 - Allow Homey pairing and repair to authenticate and discover account cribs while live crib telemetry is offline, and distinguish invalid credentials from configuration, timeout, and post-login discovery failures.
 - Keep generic authentication transport failures distinct from rejected credentials so Homey suggests checking connectivity instead of reporting a false password error.
+- Normalize trailing-dot photo hostnames before local-host checks so DNS-equivalent `localhost.` and `.local.` targets cannot bypass Homey's media SSRF boundary.
+- Coalesce concurrent Homey photo actions and unregister their shared image during device teardown to avoid duplicate registrations and leaked image resources.
+- Document offline pairing and the Advanced Flow image-token workflow, including that it retrieves saved inbox media rather than a live camera stream.
+- Select the latest saved crib photo by validated message timestamp instead of relying solely on inbox response order.
+- Enforce Homey's documented 5 MB image limit as exactly 5,000,000 bytes rather than the larger 5 MiB binary unit.
+- Strip upstream media-fetch causes from Homey photo failures so signed temporary URLs cannot leak through diagnostics.
 - Add bounded `/inbox/v2` photo discovery and a Homey Advanced Flow image token that remains usable when the crib itself is offline.
 
 ### Added

@@ -715,24 +715,24 @@ export class CradlewiseClient {
     babyId: string,
   ): Promise<CradlePhoto | undefined> {
     const response = await this.getInboxMessages(cradleId, babyId);
+    let firstPhoto: CradlePhoto | undefined;
+    let latestPhoto: CradlePhoto | undefined;
+    let latestTime = Number.NEGATIVE_INFINITY;
     for (const message of response.baby_notifications ?? []) {
       const url = inboxImageUrl(message);
       if (!url) continue;
-      return {
-        url,
-        ...(typeof message.message_id === "number"
-          ? { messageId: message.message_id }
-          : {}),
-        ...(typeof message.message_time === "string"
-          ? { messageTime: message.message_time }
-          : {}),
-        ...(typeof message.title === "string" ? { title: message.title } : {}),
-        ...(typeof message.content_type === "string"
-          ? { contentType: message.content_type }
-          : {}),
-      };
+      const photo = cribPhotoFromMessage(message, url);
+      firstPhoto ??= photo;
+      const messageTime =
+        typeof message.message_time === "string"
+          ? parseEventTime(message.message_time)
+          : Number.NaN;
+      if (Number.isFinite(messageTime) && messageTime > latestTime) {
+        latestTime = messageTime;
+        latestPhoto = photo;
+      }
     }
-    return undefined;
+    return latestPhoto ?? firstPhoto;
   }
 
   async fetchSleepAnalytics(
@@ -1814,6 +1814,22 @@ function inboxImageUrl(message: InboxMessage): string | undefined {
     message.content_type === "image" ? message.content_url : undefined,
   ];
   return candidates.find(isHttpsUrl);
+}
+
+function cribPhotoFromMessage(message: InboxMessage, url: string): CradlePhoto {
+  return {
+    url,
+    ...(typeof message.message_id === "number"
+      ? { messageId: message.message_id }
+      : {}),
+    ...(typeof message.message_time === "string"
+      ? { messageTime: message.message_time }
+      : {}),
+    ...(typeof message.title === "string" ? { title: message.title } : {}),
+    ...(typeof message.content_type === "string"
+      ? { contentType: message.content_type }
+      : {}),
+  };
 }
 
 function isHttpsUrl(value: unknown): value is string {

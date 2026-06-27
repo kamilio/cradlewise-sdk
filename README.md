@@ -114,6 +114,8 @@ If exactly one sleep source fails, `fetchSleepAnalytics()` returns the usable fa
 
 Android bundle findings used to maintain configuration discovery and the read-only inbox/photo integration are recorded in `docs/android-bundle-notes.md`. The repository does not commit APKs, XAPKs, decompiled sources, or temporary media URLs.
 
+`CradlewiseClient.getInboxMessages(cradleId, babyId)` reads the bounded saved-notification feed discovered in the Android app. `getLatestCribPhoto(cradleId, babyId)` selects the latest usable presentation image, thumbnail, or image content URL. These methods retrieve saved media metadata; they do not expose a live crib camera stream.
+
 The legacy transport is excluded from default installs. Install its optional peer only when deliberately testing a verified legacy account:
 
 ```sh
