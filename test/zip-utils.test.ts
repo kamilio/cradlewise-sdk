@@ -3,14 +3,16 @@ import {
   link,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
+import type * as FsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { strToU8, zipSync } from "fflate";
 import {
   readZipEntries,
@@ -19,6 +21,11 @@ import {
   throwZipCleanupFailures,
   writeZipEntryToFile,
 } from "../src/zip-utils.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromises>();
+  return { ...actual, open: vi.fn(actual.open) };
+});
 
 const MAX_ARCHIVE = 16 * 1024 * 1024;
 const fixtureDirectories: string[] = [];
@@ -119,6 +126,37 @@ describe("streaming ZIP utilities", () => {
     await expect(
       writeZipEntryToFile(archive, deflated, join(directory, "too-large"), 1),
     ).rejects.toThrow(/size limit/);
+  });
+
+  it("removes output when the final file close reports failure", async () => {
+    const directory = await privateDirectory();
+    const archive = join(directory, "archive.zip");
+    await writeFile(
+      archive,
+      zipSync({ "file.txt": strToU8("complete output") }),
+      { mode: 0o600 },
+    );
+    const [entry] = await readZipEntries(archive, MAX_ARCHIVE, 10);
+    if (!entry) throw new Error("Expected ZIP entry");
+    const closeError = new Error("simulated final close failure");
+    vi.mocked(open).mockImplementationOnce(async (...arguments_) => {
+      const actual =
+        await vi.importActual<typeof FsPromises>("node:fs/promises");
+      const handle = await Reflect.apply(actual.open, actual, arguments_);
+      const close = handle.close.bind(handle);
+      handle.close = async () => {
+        await close();
+        throw closeError;
+      };
+      return handle;
+    });
+    const destination = join(directory, "output.txt");
+    await expect(
+      writeZipEntryToFile(archive, entry, destination, 100),
+    ).rejects.toBe(closeError);
+    await expect(readFile(destination)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("rejects unsafe archive files and missing end records", async () => {

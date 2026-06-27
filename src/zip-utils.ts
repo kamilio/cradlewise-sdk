@@ -147,31 +147,44 @@ export async function writeZipEntryToFile(
     throw new Error("ZIP entry exceeds the size limit");
   }
   const destination = await open(destinationPath, "wx", 0o600);
+  let operationFailed = false;
+  let operationError: unknown;
   try {
     for await (const chunk of streamZipEntry(archivePath, entry)) {
       await writeAll(destination, chunk);
     }
   } catch (error) {
-    const cleanupErrors: unknown[] = [];
-    try {
-      await destination.close();
-    } catch (cleanupError) {
-      cleanupErrors.push(cleanupError);
-    }
+    operationFailed = true;
+    operationError = error;
+  }
+  const cleanupErrors: unknown[] = [];
+  try {
+    await destination.close();
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  if (operationFailed || cleanupErrors.length > 0) {
     try {
       await rm(destinationPath, { force: true });
-    } catch (cleanupError) {
-      cleanupErrors.push(cleanupError);
+    } catch (error) {
+      cleanupErrors.push(error);
     }
+  }
+  if (operationFailed) {
     throwZipCleanupFailures(
       true,
-      error,
+      operationError,
       cleanupErrors,
       "ZIP entry extraction and output cleanup failed",
     );
-    throw error;
+    throw operationError;
   }
-  await destination.close();
+  throwZipCleanupFailures(
+    false,
+    undefined,
+    cleanupErrors,
+    "ZIP entry close and output cleanup failed",
+  );
 }
 
 export async function* streamZipEntry(

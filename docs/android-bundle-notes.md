@@ -1,0 +1,105 @@
+# Android bundle research notes
+
+These notes record the mobile-app evidence used to maintain the unofficial, read-only SDK. They are implementation research, not a supported Cradlewise API contract.
+
+## Inspected artifact
+
+Inspection date: **2026-07-05**
+
+| Property            | Value                                                              |
+| ------------------- | ------------------------------------------------------------------ |
+| Android package     | `com.cradlewise.nini.app`                                          |
+| App version         | `2.57.8`                                                           |
+| Version code        | `211`                                                              |
+| Minimum Android SDK | `24`                                                               |
+| Target Android SDK  | `36`                                                               |
+| XAPK size           | `81,466,125` bytes                                                 |
+| XAPK SHA-256        | `d77a103c2819f987772ab8207bd6c8b1f0d0b9216db8ee550a5c9b36ce3e8865` |
+| Base APK entry      | `com.cradlewise.nini.app.apk`                                      |
+| Base APK size       | `67,321,547` bytes                                                 |
+| Base APK SHA-256    | `037473e3dfbe15acddc15d6afab1d4706257e731395701d3f93930f9aa676f0e` |
+| Base DEX files      | `classes.dex` through `classes13.dex`                              |
+
+The bundle was obtained through the same APKPure metadata and approved CDN-host flow implemented by `src/config.ts`. Time-limited download URLs are intentionally not recorded. Neither the XAPK nor decompiled sources are committed.
+
+## Reproduction outline
+
+1. Use the explicit Android configuration-discovery path in `src/config.ts` to obtain the current XAPK in a private temporary directory.
+2. Record the XAPK hash and extract only the base APK entry named by `manifest.json`.
+3. Record the base APK hash and inspect `AndroidManifest.xml`.
+4. Decompile the base APK with JADX 1.5.5 into a temporary directory.
+5. Search the generated Java and raw DEX strings for endpoint paths, query names, and serialized model fields.
+6. Delete the XAPK, APK, DEX, and decompiler output after recording non-secret findings.
+
+JADX returned exit status `3` because some methods could not be reconstructed, but it produced enough source and bytecode-derived strings to corroborate the findings below. Empty decompiler branches were not treated as evidence; their query names were confirmed from raw DEX string tables.
+
+## Inbox and photo API
+
+The current mobile app contains `feature/videomoments/api/BackendService.kt` behavior with these read and update routes:
+
+- `GET /inbox/v2`
+- `PUT /inbox`
+
+Only the GET route is implemented by this repository. The SDK remains read-only by default, and the update route is documented solely to explain the Android model.
+
+The GET method accepts these optional query parameters:
+
+- `device_id`
+- `page_size`
+- `tags`
+- `baby_id`
+- `message_type`
+- `cradle_id`
+- `next_token`
+- `message_id`
+
+The Video Moments screen calls the endpoint with a page size of `50`, `tags=baby`, `message_type=baby`, the current baby ID, the current cradle ID, and optionally a message ID. `device_id` is supplied by the Android app but is optional in the service wrapper.
+
+The response model exposes:
+
+- `baby_notifications`
+- `cradlewise_notifications`
+- `enable_red_dot`
+- `all_tags`
+- `eol_message`
+
+Each message may include:
+
+- `message_id`
+- `message_time`
+- `message_type`
+- `notification_id`
+- `title`
+- `body`
+- `priority`
+- `content_url`
+- `thumbnail_url`
+- `presentation_image_url`
+- `content_type`
+- `aspect_ratio`
+- `external_url`
+- `button_text`
+- `is_read`
+- `is_starred`
+- `status`
+
+Known `content_type` values are `image`, `video`, `audio`, and `normal`. For a Homey-compatible still image, prefer `presentation_image_url`, then `thumbnail_url`, then `content_url` only when `content_type` is `image`.
+
+## Repository mapping
+
+- `CradlewiseClient.getInboxMessages()` performs the signed, read-only `GET /inbox/v2` request and validates a bounded response.
+- `CradlewiseClient.getLatestCribPhoto()` selects the first usable HTTPS still-image URL from the newest baby notifications.
+- The Homey `Get the latest crib photo` Flow action returns an image token.
+- Homey downloads that image without Cradlewise authorization headers, refuses redirects and local/IP targets, accepts JPEG/PNG/WebP only, and enforces Homey's 5 MB image limit.
+- Photo lookup uses account discovery and the inbox service, so it does not require the crib's live status endpoints to be available.
+
+## Pairing implication
+
+Account authentication and crib discovery are separate from live crib telemetry. The Android evidence and existing API behavior support listing a discovered crib even when its state, online-status, and firmware endpoints are unavailable. Homey pairing and repair therefore validate authenticated discovery only; normal polling is responsible for showing the crib as unavailable or offline afterward.
+
+## Open questions
+
+- The inbox service is undocumented and may change without notice.
+- The ordering guarantee for `baby_notifications` is inferred from the mobile screen's use of the first page and should be rechecked after Android app updates.
+- Media URL hostnames and expiry periods are response-dependent. Homey therefore validates each URL at use time and does not persist it.
+- No live account request was needed for this inspection. A credentialed integration test may be run manually, but it must not log response URLs because they may contain temporary signatures.

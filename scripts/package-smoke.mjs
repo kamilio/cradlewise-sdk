@@ -12,6 +12,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
+import {
+  forwardCommandSignals,
+  terminateCommand,
+} from "../packages/homey-app/scripts/command-process.mjs";
 import {
   PACKAGE_NAME,
   PACKAGE_VERSION,
@@ -91,6 +96,7 @@ for (const filename of readdirSync("dist").filter((entry) =>
 
 const version = spawnSync(process.execPath, ["dist/cli.js", "--version"], {
   encoding: "utf8",
+  env: reviewedChildEnvironment(process.env),
   maxBuffer: 1024 * 1024,
   timeout: 10_000,
 });
@@ -104,6 +110,7 @@ if (
 if (process.platform !== "win32") {
   const executableVersion = spawnSync("./dist/cli.js", ["--version"], {
     encoding: "utf8",
+    env: reviewedChildEnvironment(process.env),
     maxBuffer: 1024 * 1024,
     timeout: 10_000,
   });
@@ -138,11 +145,10 @@ const invalidCli = spawnSync(
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
     timeout: 10_000,
-    env: {
-      ...process.env,
+    env: Object.assign(reviewedChildEnvironment(process.env), {
       CRADLEWISE_LOGIN: secretMarkers[0],
       CRADLEWISE_PASSWORD: secretMarkers[1],
-    },
+    }),
   },
 );
 const invalidCliOutput = invalidCli.stdout + invalidCli.stderr;
@@ -158,22 +164,23 @@ if (
 }
 
 const child = spawn(process.execPath, ["dist/cli.js", "mcp"], {
+  detached: process.platform !== "win32",
   stdio: ["pipe", "pipe", "pipe"],
-  env: {
-    ...process.env,
+  env: Object.assign(reviewedChildEnvironment(process.env), {
     CRADLEWISE_LOGIN: secretMarkers[0],
     CRADLEWISE_PASSWORD: secretMarkers[1],
-  },
+  }),
 });
 let output = "";
 let errors = "";
 const maximumChildOutput = 1024 * 1024;
 let outputExceeded = false;
+const signalForwarding = forwardCommandSignals(child);
 const appendOutput = (current, chunk) => {
   const next = current + String(chunk);
   if (Buffer.byteLength(next) > maximumChildOutput) {
     outputExceeded = true;
-    child.kill("SIGTERM");
+    terminateCommand(child, "SIGTERM");
     return current;
   }
   return next;
@@ -215,17 +222,27 @@ let timedOut = false;
 let hardTimeout;
 const timeout = setTimeout(() => {
   timedOut = true;
-  child.kill("SIGTERM");
-  hardTimeout = setTimeout(() => child.kill("SIGKILL"), 1_000);
+  terminateCommand(child, "SIGTERM");
+  hardTimeout = setTimeout(() => terminateCommand(child, "SIGKILL"), 1_000);
 }, 2_000);
-const exit = await new Promise((resolve, reject) => {
-  child.once("error", reject);
-  child.once("close", (code, signal) => resolve({ code, signal }));
-});
+let exit;
+try {
+  exit = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal }));
+  });
+} finally {
+  signalForwarding.stop();
+}
 clearTimeout(timeout);
 if (hardTimeout) clearTimeout(hardTimeout);
 if (timedOut) throw new Error("MCP smoke process timed out");
 if (outputExceeded) throw new Error("MCP smoke process exceeded output limits");
+if (signalForwarding.forwardedSignal) {
+  throw new Error(
+    `MCP smoke process interrupted by ${signalForwarding.forwardedSignal}`,
+  );
+}
 if (secretMarkers.some((secret) => (output + errors).includes(secret))) {
   throw new Error("MCP output exposed a configured secret");
 }
@@ -370,6 +387,7 @@ function runChecked(command, arguments_, cwd) {
   const result = spawnSync(command, arguments_, {
     cwd,
     encoding: "utf8",
+    env: reviewedChildEnvironment(process.env),
     maxBuffer: 2 * 1024 * 1024,
     timeout: 120_000,
   });

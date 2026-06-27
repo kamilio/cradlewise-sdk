@@ -112,6 +112,8 @@ If exactly one sleep source fails, `fetchSleepAnalytics()` returns the usable fa
 
 ## Legacy realtime research transport
 
+Android bundle findings used to maintain configuration discovery and the read-only inbox/photo integration are recorded in `docs/android-bundle-notes.md`. The repository does not commit APKs, XAPKs, decompiled sources, or temporary media URLs.
+
 The legacy transport is excluded from default installs. Install its optional peer only when deliberately testing a verified legacy account:
 
 ```sh

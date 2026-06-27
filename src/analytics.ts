@@ -1,4 +1,5 @@
 import { SLEEP_PHASE_NAMES } from "./constants.js";
+import { getDateTime } from "./date-utils.js";
 import { SleepAnalytics } from "./models.js";
 import { utf8ByteLength } from "./text-utils.js";
 import type { JsonObject, SleepEvent } from "./types.js";
@@ -41,14 +42,14 @@ export function aggregateSleepAnalytics(
     sleepSessionsSaved === undefined
       ? undefined
       : copySavedSessions(sleepSessionsSaved);
-  const nowTime = Date.prototype.getTime.call(now);
+  const nowTime = getDateTime(now);
   if (!Number.isFinite(nowTime)) {
     throw new RangeError("now must be a valid date");
   }
   const rangeStartTime =
     rangeStart === undefined
       ? Number.NEGATIVE_INFINITY
-      : Date.prototype.getTime.call(rangeStart);
+      : getDateTime(rangeStart);
   if (!Number.isFinite(rangeStartTime) && rangeStart !== undefined) {
     throw new RangeError("rangeStart must be a valid date");
   }
@@ -359,7 +360,7 @@ export function parseEventTime(value: string, timezone?: string): number {
   ) {
     return NaN;
   }
-  const localTime = localDate.getTime();
+  const localTime = getDateTime(localDate);
   const milliseconds = fractionMilliseconds(fraction);
   if (zone === "Z") return localTime + milliseconds;
   if (zone) {

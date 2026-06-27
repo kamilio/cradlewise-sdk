@@ -10,6 +10,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { gunzipSync } from "node:zlib";
+import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
 
 const directory = mkdtempSync(join(tmpdir(), "cradlewise-attw-"));
 const MAX_PACKED_FILES = 1000;
@@ -25,11 +26,10 @@ try {
     ["pack", "--json", "--pack-destination", directory],
     {
       encoding: "utf8",
-      env: {
-        ...process.env,
+      env: Object.assign(reviewedChildEnvironment(process.env), {
         npm_config_dry_run: "false",
         npm_config_ignore_scripts: "true",
-      },
+      }),
       maxBuffer: 4 * 1024 * 1024,
       timeout: 120_000,
     },
@@ -198,6 +198,7 @@ try {
   const attw = process.platform === "win32" ? "attw.cmd" : "attw";
   const checked = spawnSync(attw, [tarball, "--profile", "esm-only"], {
     encoding: "utf8",
+    env: reviewedChildEnvironment(process.env),
     stdio: "inherit",
     timeout: 120_000,
   });

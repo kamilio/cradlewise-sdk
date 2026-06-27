@@ -251,4 +251,80 @@ describe("Homey SDK vendoring", () => {
     await expect(readFile(destination, "utf8")).resolves.toBe("old archive\n");
     await expect(readFile(sentinel, "utf8")).resolves.toBe("preserve me\n");
   });
+
+  it.skipIf(process.platform === "win32")(
+    "terminates inherited vendoring descendants after a timeout",
+    async () => {
+      const fixture = await mkdtemp(join(tmpdir(), "homey-vendor-group-test-"));
+      fixtures.push(fixture);
+      const leakedFile = join(fixture, "descendant-survived");
+      const descendant = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(leakedFile)}, "leaked"), 250)`;
+      const parent = `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(descendant)}], { stdio: "inherit" }); setInterval(() => {}, 1000)`;
+      const vendorModule =
+        (await import("../scripts/vendor-homey-sdk.mjs")) as unknown as {
+          runCommand(
+            command: string,
+            arguments_: string[],
+            cwd: string,
+            options: { timeoutMs: number; killGraceMs: number },
+          ): Promise<void>;
+        };
+
+      await expect(
+        vendorModule.runCommand(
+          process.execPath,
+          ["-e", parent],
+          process.cwd(),
+          {
+            timeoutMs: 50,
+            killGraceMs: 50,
+          },
+        ),
+      ).rejects.toThrow(/timed out/u);
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 350));
+      await expect(access(leakedFile)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    },
+  );
+
+  it("runs vendoring commands with a reviewed environment", async () => {
+    const vendorModule =
+      (await import("../scripts/vendor-homey-sdk.mjs")) as unknown as {
+        runCommand(
+          command: string,
+          arguments_: string[],
+          cwd: string,
+          options: { timeoutMs: number; killGraceMs: number },
+        ): Promise<void>;
+      };
+    const previousPassword = process.env.CRADLEWISE_PASSWORD;
+    const previousNodeOptions = process.env.NODE_OPTIONS;
+    process.env.CRADLEWISE_PASSWORD = "blocked-account-secret";
+    process.env.NODE_OPTIONS = "--no-warnings";
+    try {
+      await expect(
+        vendorModule.runCommand(
+          process.execPath,
+          [
+            "-e",
+            "if (process.env.CRADLEWISE_PASSWORD || process.env.NODE_OPTIONS) process.exit(7)",
+          ],
+          process.cwd(),
+          { timeoutMs: 1_000, killGraceMs: 50 },
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      if (previousPassword === undefined) {
+        delete process.env.CRADLEWISE_PASSWORD;
+      } else {
+        process.env.CRADLEWISE_PASSWORD = previousPassword;
+      }
+      if (previousNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS;
+      } else {
+        process.env.NODE_OPTIONS = previousNodeOptions;
+      }
+    }
+  });
 });

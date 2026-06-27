@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "cradlewise-types-"));
 const root = process.cwd();
@@ -85,6 +86,7 @@ void cradlewiseToolcraftRoot;
     );
     const checked = spawnSync(tsc, ["-p", join(directory, "tsconfig.json")], {
       encoding: "utf8",
+      env: reviewedChildEnvironment(process.env),
       maxBuffer: 1024 * 1024,
       timeout: 60_000,
     });

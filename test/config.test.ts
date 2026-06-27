@@ -4,8 +4,10 @@ import {
   lstat,
   mkdir,
   mkdtemp as makeTemporaryDirectory,
+  open,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   symlink,
@@ -30,6 +32,7 @@ import {
   isTrustedDiscoveredConfig,
   isTrustedDiscoveredIotEndpoint,
 } from "../src/discovery-trust.js";
+import { readZipEntries } from "../src/zip-utils.js";
 
 vi.mock("../src/discovery-trust.js", () => ({
   isTrustedDiscoveredConfig: vi.fn(() => true),
@@ -111,6 +114,33 @@ function validDownloadFetch(): ReturnType<typeof vi.fn<typeof fetch>> {
     .fn<typeof fetch>()
     .mockResolvedValueOnce(new Response(strToU8(`binary${downloadUrl}binary`)))
     .mockResolvedValueOnce(new Response(Buffer.from(validXapk())));
+}
+
+async function corruptZipEntry(
+  directory: string,
+  archive: Uint8Array,
+  name: string,
+): Promise<Uint8Array> {
+  const path = join(directory, "corrupt-source.zip");
+  await writeFile(path, archive);
+  const entries = await readZipEntries(path, archive.byteLength, 32);
+  const entry = entries.find((candidate) => candidate.name === name);
+  if (!entry || entry.compressedSize === 0) {
+    throw new Error(`Missing compressed ZIP entry: ${name}`);
+  }
+  const view = new DataView(
+    archive.buffer,
+    archive.byteOffset,
+    archive.byteLength,
+  );
+  const nameLength = view.getUint16(entry.localHeaderOffset + 26, true);
+  const extraLength = view.getUint16(entry.localHeaderOffset + 28, true);
+  const dataOffset = entry.localHeaderOffset + 30 + nameLength + extraLength;
+  const corrupted = Uint8Array.from(archive);
+  const byte = corrupted[dataOffset];
+  if (byte === undefined) throw new Error(`Invalid ZIP entry offset: ${name}`);
+  corrupted[dataOffset] = byte ^ 0xff;
+  return corrupted;
 }
 
 describe("AppConfig", () => {
@@ -653,6 +683,49 @@ describe("getAppConfig", () => {
     await expect(readdir(directory)).resolves.toEqual(["config.json"]);
   });
 
+  it("rejects a cache path replaced while its file is being read", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    const cachePath = join(directory, "config.json");
+    const displacedPath = join(directory, "displaced.json");
+    const replacementPath = join(directory, "replacement.json");
+    await writeFile(cachePath, JSON.stringify({ cacheVersion: 1, ...data }), {
+      mode: 0o600,
+    });
+    await writeFile(replacementPath, "{}", { mode: 0o600 });
+    const probe = await open(join(directory, "probe"), "w");
+    const prototype = Object.getPrototypeOf(probe) as {
+      read: typeof probe.read;
+    };
+    const originalRead = prototype.read;
+    await probe.close();
+    let swapped = false;
+    const read = vi.spyOn(prototype, "read").mockImplementation(async function (
+      this: typeof probe,
+      ...arguments_
+    ) {
+      const result = await Reflect.apply(
+        originalRead,
+        this,
+        arguments_ as never,
+      );
+      if (!swapped) {
+        swapped = true;
+        await rename(cachePath, displacedPath);
+        await rename(replacementPath, cachePath);
+      }
+      return result;
+    });
+    const fetchMock = validDownloadFetch();
+    try {
+      await expect(
+        getAppConfig({ cachePath, fetch: fetchMock }),
+      ).resolves.toMatchObject({ cognitoUserPoolId: "pool" });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      read.mockRestore();
+    }
+  });
+
   it("extracts config from a downloaded XAPK and writes the cache", async () => {
     const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
     const cachePath = join(directory, "config.json");
@@ -940,6 +1013,91 @@ describe("getAppConfig", () => {
     ).resolves.toMatchObject({
       iotEndpoint: "right-ats.iot.us-east-1.amazonaws.com",
     });
+  });
+
+  it("ignores an untrusted decoy before a trusted IoT endpoint", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    vi.mocked(isTrustedDiscoveredIotEndpoint)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    const xapk = zipSync({
+      "base.apk": zipSync({
+        "res/raw/amplifyconfiguration.json": strToU8(JSON.stringify(amplify)),
+        "classes.dex": strToU8(
+          "decoy-ats.iot.us-east-1.amazonaws.com trusted-ats.iot.us-east-1.amazonaws.com",
+        ),
+      }),
+    });
+
+    await expect(
+      getAppConfig({
+        cachePath: join(directory, "config.json"),
+        fetch: vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(new Response(downloadUrl))
+          .mockResolvedValueOnce(new Response(xapk)),
+      }),
+    ).resolves.toMatchObject({
+      iotEndpoint: "trusted-ats.iot.us-east-1.amazonaws.com",
+    });
+  });
+
+  it("stops scanning after a trusted IoT endpoint", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    const baseApk = zipSync({
+      "res/raw/amplifyconfiguration.json": strToU8(JSON.stringify(amplify)),
+      "classes.dex": strToU8("trusted-ats.iot.us-east-1.amazonaws.com"),
+      "classes2.dex": strToU8("irrelevant trailing DEX content"),
+    });
+    const corruptedBaseApk = await corruptZipEntry(
+      directory,
+      baseApk,
+      "classes2.dex",
+    );
+    const xapk = zipSync({ "base.apk": corruptedBaseApk });
+
+    await expect(
+      getAppConfig({
+        cachePath: join(directory, "config.json"),
+        fetch: vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(new Response(downloadUrl))
+          .mockResolvedValueOnce(new Response(xapk)),
+      }),
+    ).resolves.toMatchObject({
+      iotEndpoint: "trusted-ats.iot.us-east-1.amazonaws.com",
+    });
+  });
+
+  it("bounds untrusted IoT endpoint candidates in DEX content", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    vi.mocked(isTrustedDiscoveredIotEndpoint).mockReturnValue(false);
+    const dex = Array.from(
+      { length: 1025 },
+      (_, index) => `decoy${index}-ats.iot.us-east-1.amazonaws.com`,
+    ).join(" ");
+    const xapk = zipSync({
+      "base.apk": zipSync({
+        "res/raw/amplifyconfiguration.json": strToU8(JSON.stringify(amplify)),
+        "classes.dex": strToU8(dex),
+      }),
+    });
+
+    await expect(
+      getAppConfig({
+        cachePath: join(directory, "config.json"),
+        fetch: vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(new Response(downloadUrl))
+          .mockResolvedValueOnce(new Response(xapk)),
+      }),
+    ).rejects.toMatchObject({
+      name: "CradlewiseConfigError",
+      cause: expect.objectContaining({
+        message: "DEX contains too many AWS IoT endpoint candidates",
+      }),
+    });
+    vi.mocked(isTrustedDiscoveredIotEndpoint).mockReturnValue(true);
   });
 
   it("rejects malformed UTF-8 in the embedded Amplify configuration", async () => {
@@ -1329,6 +1487,48 @@ describe("getAppConfig", () => {
       }),
     ).resolves.toMatchObject({ cognitoRegion: "us-east-1" });
     expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("cancels a non-streaming bundle body when spooling times out", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    const controller = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValue(controller.signal);
+    const cancel = vi.fn(() => Promise.resolve());
+    let beginArrayBuffer: (() => void) | undefined;
+    const arrayBufferStarted = new Promise<void>((resolve) => {
+      beginArrayBuffer = resolve;
+    });
+    try {
+      const discovery = getAppConfig({
+        cachePath: join(directory, "buffer-timeout.json"),
+        fetch: vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(new Response(downloadUrl))
+          .mockResolvedValueOnce({
+            status: 200,
+            ok: true,
+            headers: new Headers(),
+            body: { cancel },
+            arrayBuffer: () => {
+              beginArrayBuffer?.();
+              return new Promise<ArrayBuffer>(() => undefined);
+            },
+          } as never),
+        forceRefresh: true,
+      });
+      await arrayBufferStarted;
+      controller.abort(new DOMException("Timed out", "TimeoutError"));
+
+      await expect(discovery).rejects.toMatchObject({
+        name: "CradlewiseConfigError",
+        cause: expect.objectContaining({ name: "TimeoutError" }),
+      });
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it("uses typed-array internal lengths for download limits", async () => {

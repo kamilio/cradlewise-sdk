@@ -41,6 +41,7 @@ const MAX_SELECTED_APK_CONTENT_BYTES = 256 * 1024 * 1024;
 const MAX_AMPLIFY_CONFIG_BYTES = 1024 * 1024;
 const MAX_IN_MEMORY_RESPONSE_BYTES = 8 * 1024 * 1024;
 const DEX_SCAN_OVERLAP_BYTES = 256;
+const MAX_IOT_ENDPOINT_CANDIDATES = 1024;
 const MAX_RESPONSE_CHUNKS = 8192;
 const MAX_ARCHIVE_ENTRIES = 50_000;
 const MAX_CONFIG_STRING_BYTES = 8192;
@@ -254,7 +255,7 @@ async function readCachedConfig(
         (constants.O_NONBLOCK ?? 0),
     );
     try {
-      const metadata = await handle.stat();
+      let metadata = await handle.stat();
       if (
         !isSafeCacheFile(metadata, expectedUserId) ||
         metadata.dev !== pathMetadata.dev ||
@@ -263,8 +264,19 @@ async function readCachedConfig(
         return undefined;
       }
       await handle.chmod(0o600);
+      metadata = await handle.stat();
       const contents = await readBoundedCacheFile(handle);
       if (contents === undefined) return undefined;
+      const [after, pathAfter] = await Promise.all([
+        handle.stat(),
+        lstat(cachePath),
+      ]);
+      if (
+        !sameCacheFile(metadata, after, expectedUserId) ||
+        !sameCacheFile(metadata, pathAfter, expectedUserId)
+      ) {
+        return undefined;
+      }
       const raw: unknown = JSON.parse(contents);
       if (!isRecord(raw) || raw.cacheVersion !== CACHE_VERSION) {
         return undefined;
@@ -318,6 +330,23 @@ async function readBoundedCacheFile(
   } catch {
     return undefined;
   }
+}
+
+function sameCacheFile(
+  first: Awaited<ReturnType<typeof lstat>>,
+  second: Awaited<ReturnType<typeof lstat>>,
+  expectedUserId: number | undefined,
+): boolean {
+  return (
+    isSafeCacheFile(second, expectedUserId) &&
+    first.dev === second.dev &&
+    first.ino === second.ino &&
+    first.nlink === second.nlink &&
+    first.size === second.size &&
+    first.mode === second.mode &&
+    first.mtimeMs === second.mtimeMs &&
+    first.ctimeMs === second.ctimeMs
+  );
 }
 
 function isSafeCacheFile(
@@ -585,12 +614,19 @@ async function extractIotEndpointFromEntries(
   region: string,
 ): Promise<string | undefined> {
   let endpoint: string | undefined;
+  const candidateBudget = { count: 0 };
   const suffix = new TextEncoder().encode(`-ats.iot.${region}.amazonaws.com`);
   for (const entry of entries) {
     let trailing: Uint8Array<ArrayBufferLike> = new Uint8Array();
     for await (const chunk of streamZipEntry(archivePath, entry)) {
-      if (endpoint) continue;
-      endpoint = findIotEndpointInBytes(trailing, chunk, suffix, region);
+      endpoint = findIotEndpointInBytes(
+        trailing,
+        chunk,
+        suffix,
+        region,
+        candidateBudget,
+      );
+      if (endpoint) return endpoint;
       trailing = copyVirtualTail(trailing, chunk, DEX_SCAN_OVERLAP_BYTES);
     }
   }
@@ -726,9 +762,11 @@ function findIotEndpointInBytes(
   chunk: Uint8Array,
   suffix: Uint8Array,
   region: string,
+  candidateBudget: { count: number },
 ): string | undefined {
   const length = prefix.byteLength + chunk.byteLength;
   for (let marker = 0; marker + suffix.byteLength <= length; marker += 1) {
+    if (marker + suffix.byteLength <= prefix.byteLength) continue;
     if (virtualByte(prefix, chunk, marker) !== suffix[0]) continue;
     let suffixMatches = true;
     for (let index = 1; index < suffix.byteLength; index += 1) {
@@ -755,7 +793,13 @@ function findIotEndpointInBytes(
       endpointBytes[index] = value;
     }
     const endpoint = new TextDecoder("latin1").decode(endpointBytes);
-    if (isAwsIotEndpointForRegion(endpoint, region)) return endpoint;
+    if (isAwsIotEndpointForRegion(endpoint, region)) {
+      candidateBudget.count += 1;
+      if (candidateBudget.count > MAX_IOT_ENDPOINT_CANDIDATES) {
+        throw new Error("DEX contains too many AWS IoT endpoint candidates");
+      }
+      if (isTrustedDiscoveredIotEndpoint(endpoint)) return endpoint;
+    }
   }
   return undefined;
 }
@@ -817,6 +861,7 @@ async function downloadResponseToTemporaryFile(
       const rawBuffer: unknown = await raceWithAbort(
         response.arrayBuffer(),
         signal,
+        () => cancelResponseBody(response),
       );
       const byteLength = getArrayBufferByteLength(rawBuffer);
       if (byteLength === undefined) {

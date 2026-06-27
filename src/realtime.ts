@@ -4,6 +4,7 @@ import type { CradlewiseAuth } from "./auth.js";
 import { getArrayBufferByteLength, snapshotUint8Array } from "./byte-utils.js";
 import type { CradlewiseClient } from "./client.js";
 import { isAwsIotEndpointForRegion } from "./config.js";
+import { getDateTime } from "./date-utils.js";
 import { CradlewiseRealtimeError } from "./errors.js";
 import { cloneCradleState } from "./models.js";
 import { utf8ByteLength } from "./text-utils.js";
@@ -655,7 +656,7 @@ export class CradlewiseRealtime extends EventEmitter<CradlewiseRealtimeEventMap>
   }
 
   #validateCredentialExpiration(expiration: Date): number {
-    const expirationTime = expiration.getTime();
+    const expirationTime = getDateTime(expiration);
     if (!Number.isFinite(expirationTime)) {
       throw new CradlewiseRealtimeError(
         "Realtime credentials have an invalid expiration date",
@@ -988,9 +989,7 @@ function readRealtimeCredentials(
     const sessionToken = aws.sessionToken;
     const expiration = aws.expiration;
     const expirationTime =
-      expiration instanceof Date
-        ? Date.prototype.getTime.call(expiration)
-        : Number.NaN;
+      expiration instanceof Date ? getDateTime(expiration) : Number.NaN;
     if (
       !isCredentialString(accessKeyId) ||
       !isCredentialString(secretAccessKey) ||

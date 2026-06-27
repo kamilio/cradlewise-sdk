@@ -90,6 +90,31 @@ export interface CradleState extends JsonObject {
   rawShadow?: JsonObject;
 }
 
+export interface InboxMessage extends JsonObject {
+  message_id?: number | null;
+  message_time?: string | null;
+  message_type?: string | null;
+  title?: string | null;
+  body?: string | null;
+  content_url?: string | null;
+  thumbnail_url?: string | null;
+  presentation_image_url?: string | null;
+  content_type?: string | null;
+}
+
+export interface InboxMessagesResponse extends JsonObject {
+  baby_notifications?: InboxMessage[] | null;
+  cradlewise_notifications?: InboxMessage[] | null;
+}
+
+export interface CradlePhoto {
+  url: string;
+  messageId?: number;
+  messageTime?: string;
+  title?: string;
+  contentType?: string;
+}
+
 export interface SleepEvent extends JsonObject {
   event_time?: string | null;
   event_value?: string | number | null;

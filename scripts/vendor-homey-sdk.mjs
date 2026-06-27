@@ -15,6 +15,11 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  forwardCommandSignals,
+  terminateCommand,
+} from "../packages/homey-app/scripts/command-process.mjs";
+import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const homey = join(root, "packages", "homey-app");
@@ -48,7 +53,7 @@ async function vendorHomeySdkUnlocked() {
   return withVendorCleanup(
     async () => {
       try {
-        await run(
+        await runCommand(
           "npm",
           ["pack", root, "--pack-destination", temporary, "--ignore-scripts"],
           root,
@@ -66,7 +71,7 @@ async function vendorHomeySdkUnlocked() {
           recursive: true,
           force: true,
         });
-        await run(
+        await runCommand(
           "npm",
           [
             "install",
@@ -77,7 +82,7 @@ async function vendorHomeySdkUnlocked() {
           ],
           homey,
         );
-        await run("npm", ["ci", "--ignore-scripts"], homey);
+        await runCommand("npm", ["ci", "--ignore-scripts"], homey);
         for (const file of await sdkTarballs(vendor)) {
           if (file !== filename) await rm(join(vendor, file), { force: true });
         }
@@ -167,7 +172,7 @@ export async function rollback(
     write = writeFile,
     remove = rm,
     listTarballs = sdkTarballs,
-    runCommand = run,
+    runCommand,
   } = {},
 ) {
   const rollbackErrors = [];
@@ -279,28 +284,47 @@ async function assertRegularFile(file) {
   return stats;
 }
 
-function run(command, args, cwd) {
+export function runCommand(
+  command,
+  args,
+  cwd,
+  { timeoutMs = COMMAND_TIMEOUT_MS, killGraceMs = COMMAND_KILL_GRACE_MS } = {},
+) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: "inherit" });
+    const child = spawn(command, args, {
+      cwd,
+      detached: process.platform !== "win32",
+      env: reviewedChildEnvironment(process.env),
+      stdio: "inherit",
+    });
     let timeoutError;
     let forceTimer;
+    const signalForwarding = forwardCommandSignals(child);
     const timer = setTimeout(() => {
       timeoutError = new Error(`${command} ${args.join(" ")} timed out`);
-      child.kill("SIGTERM");
+      terminateCommand(child, "SIGTERM");
       forceTimer = setTimeout(
-        () => child.kill("SIGKILL"),
-        COMMAND_KILL_GRACE_MS,
+        () => terminateCommand(child, "SIGKILL"),
+        killGraceMs,
       );
-    }, COMMAND_TIMEOUT_MS);
+    }, timeoutMs);
     child.once("error", (error) => {
       clearTimeout(timer);
       clearTimeout(forceTimer);
+      signalForwarding.stop();
       reject(error);
     });
     child.once("close", (code, signal) => {
       clearTimeout(timer);
       clearTimeout(forceTimer);
+      signalForwarding.stop();
       if (timeoutError instanceof Error) reject(timeoutError);
+      else if (signalForwarding.forwardedSignal)
+        reject(
+          new Error(
+            `${command} ${args.join(" ")} interrupted by ${signalForwarding.forwardedSignal}`,
+          ),
+        );
       else if (code === 0) resolve();
       else
         reject(

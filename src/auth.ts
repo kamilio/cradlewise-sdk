@@ -19,6 +19,7 @@ import {
   wrapInitiateAuth,
 } from "cognito-srp-helper";
 import { AppConfig } from "./config.js";
+import { getDateTime } from "./date-utils.js";
 import { CradlewiseAuthError } from "./errors.js";
 import { utf8ByteLength } from "./text-utils.js";
 import type { CradlewiseCredentials, CradlewiseTokens } from "./types.js";
@@ -149,8 +150,12 @@ export class CradlewiseAuth {
       );
     }
     const currentCredentials = this.#credentials;
-    const expiration = currentCredentials?.aws.expiration.getTime() ?? 0;
-    const tokenExpiration = currentCredentials?.tokens.expiresAt.getTime() ?? 0;
+    const expiration = currentCredentials
+      ? getDateTime(currentCredentials.aws.expiration)
+      : 0;
+    const tokenExpiration = currentCredentials
+      ? getDateTime(currentCredentials.tokens.expiresAt)
+      : 0;
     if (
       currentCredentials &&
       Math.min(expiration, tokenExpiration) > Date.now() + minimumValidityMs
@@ -163,8 +168,8 @@ export class CradlewiseAuth {
       throw new CradlewiseAuthError("Cradlewise authentication was superseded");
     }
     const refreshedExpiration = Math.min(
-      credentials.aws.expiration.getTime(),
-      credentials.tokens.expiresAt.getTime(),
+      getDateTime(credentials.aws.expiration),
+      getDateTime(credentials.tokens.expiresAt),
     );
     if (refreshedExpiration <= Date.now() + minimumValidityMs) {
       if (generation === this.#authenticationGeneration) {
@@ -347,9 +352,7 @@ export class CradlewiseAuth {
       const sessionToken = aws?.SessionToken;
       const expiration = aws?.Expiration;
       const expirationTime =
-        expiration instanceof Date
-          ? Date.prototype.getTime.call(expiration)
-          : Number.NaN;
+        expiration instanceof Date ? getDateTime(expiration) : Number.NaN;
       if (
         !isCredentialString(accessKeyId) ||
         !isCredentialString(secretAccessKey) ||
@@ -461,21 +464,26 @@ function parseTokens(
       ? reportedExpiresIn
       : 3600;
   const now = Date.now();
-  if (accessTokenExpiration && accessTokenExpiration.getTime() <= now) {
+  if (accessTokenExpiration && getDateTime(accessTokenExpiration) <= now) {
     throw new Error("Cognito returned an expired access token");
   }
-  if (idTokenExpiration && idTokenExpiration.getTime() <= now) {
+  if (idTokenExpiration && getDateTime(idTokenExpiration) <= now) {
     throw new Error("Cognito returned an expired ID token");
   }
   const reportedExpiration = new Date(now + expiresIn * 1000);
   const expiresAt = new Date(
     Math.min(
-      idTokenExpiration?.getTime() ?? reportedExpiration.getTime(),
-      accessTokenExpiration?.getTime() ?? Number.POSITIVE_INFINITY,
-      reportedExpiration.getTime(),
+      idTokenExpiration
+        ? getDateTime(idTokenExpiration)
+        : getDateTime(reportedExpiration),
+      accessTokenExpiration
+        ? getDateTime(accessTokenExpiration)
+        : Number.POSITIVE_INFINITY,
+      getDateTime(reportedExpiration),
     ),
   );
-  if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= now) {
+  const expirationTime = getDateTime(expiresAt);
+  if (!Number.isFinite(expirationTime) || expirationTime <= now) {
     throw new Error("Cognito returned an expired ID token");
   }
   return {
@@ -582,7 +590,7 @@ function readJwtExpiration(token: string): Date | undefined {
       return undefined;
     }
     const date = new Date(expiration * 1000);
-    return Number.isFinite(date.getTime()) ? date : undefined;
+    return Number.isFinite(getDateTime(date)) ? date : undefined;
   } catch {
     return undefined;
   }

@@ -5,6 +5,7 @@ import { aggregateSleepAnalytics, parseEventTime } from "./analytics.js";
 import type { CradlewiseAuth } from "./auth.js";
 import { snapshotUint8Array } from "./byte-utils.js";
 import { isApiBaseUrlForRegion } from "./config.js";
+import { getDateTime } from "./date-utils.js";
 import { CradlewiseApiError } from "./errors.js";
 import { Cradle } from "./models.js";
 import type { SleepAnalytics } from "./models.js";
@@ -12,9 +13,12 @@ import { utf8ByteLength } from "./text-utils.js";
 import type {
   BabyProfile,
   CradleRecord,
+  CradlePhoto,
   CradleState,
   CradlewiseAwsCredentials,
   CradlewiseClientOptions,
+  InboxMessage,
+  InboxMessagesResponse,
   JsonObject,
   SleepAnalyticsResponse,
   SleepAnalyticsQuery,
@@ -30,6 +34,7 @@ const MAX_DISCOVERY_RECORDS = 100;
 const MAX_JSON_DEPTH = 100;
 const MAX_JSON_NODES = 1_000_000;
 const MAX_SLEEP_RECORDS = 100_000;
+const MAX_INBOX_RECORDS = 100;
 const MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const MAX_RESPONSE_CHUNKS = 8192;
@@ -354,6 +359,12 @@ export class CradlewiseClient {
   async #performDiscovery(): Promise<Map<string, Cradle>> {
     const profiles = await this.getBabyProfiles();
     const discovered = new Map<string, Cradle>();
+    const existingUpdates: Array<{
+      cradle: Cradle;
+      babyId: string;
+      babyName: string;
+      timezone: string | undefined;
+    }> = [];
     const profileCradles: Array<{
       profile: BabyProfile;
       babyId: string | number;
@@ -392,9 +403,12 @@ export class CradlewiseClient {
         }
         const existing = this.cradles.get(cradleId);
         if (existing instanceof Cradle && existing.cradleId === cradleId) {
-          existing.babyId = String(babyId);
-          existing.babyName = profile.name ?? "Baby";
-          existing.timezone = record.timezone ?? undefined;
+          existingUpdates.push({
+            cradle: existing,
+            babyId: String(babyId),
+            babyName: profile.name ?? "Baby",
+            timezone: record.timezone ?? undefined,
+          });
           discovered.set(cradleId, existing);
           continue;
         }
@@ -408,6 +422,11 @@ export class CradlewiseClient {
           }),
         );
       }
+    }
+    for (const update of existingUpdates) {
+      update.cradle.babyId = update.babyId;
+      update.cradle.babyName = update.babyName;
+      update.cradle.timezone = update.timezone;
     }
     this.cradles.clear();
     for (const [id, cradle] of discovered) this.cradles.set(id, cradle);
@@ -666,6 +685,54 @@ export class CradlewiseClient {
       return result as JsonObject;
     }
     throw unexpectedResponse("status timeline", result);
+  }
+
+  async getInboxMessages(
+    cradleId: string,
+    babyId: string,
+    pageSize = 50,
+  ): Promise<InboxMessagesResponse> {
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      throw new RangeError("pageSize must be an integer from 1 through 100");
+    }
+    const result = await this.request<unknown>("GET", "/inbox/v2", {
+      query: {
+        page_size: pageSize,
+        tags: "baby",
+        baby_id: requireQueryValue(babyId, "babyId"),
+        message_type: "baby",
+        cradle_id: requireQueryValue(cradleId, "cradleId"),
+      },
+    });
+    if (!isInboxMessagesResponse(result)) {
+      throw unexpectedResponse("inbox v2", result);
+    }
+    return result;
+  }
+
+  async getLatestCribPhoto(
+    cradleId: string,
+    babyId: string,
+  ): Promise<CradlePhoto | undefined> {
+    const response = await this.getInboxMessages(cradleId, babyId);
+    for (const message of response.baby_notifications ?? []) {
+      const url = inboxImageUrl(message);
+      if (!url) continue;
+      return {
+        url,
+        ...(typeof message.message_id === "number"
+          ? { messageId: message.message_id }
+          : {}),
+        ...(typeof message.message_time === "string"
+          ? { messageTime: message.message_time }
+          : {}),
+        ...(typeof message.title === "string" ? { title: message.title } : {}),
+        ...(typeof message.content_type === "string"
+          ? { contentType: message.content_type }
+          : {}),
+      };
+    }
+    return undefined;
   }
 
   async fetchSleepAnalytics(
@@ -1103,7 +1170,7 @@ function resolveSleepRange(options: SleepDataRangeOptions): ResolvedSleepRange {
   }
   const end = endDateInput ?? new Date();
   const start =
-    startDateInput ?? new Date(toDate(end).getTime() - 7 * 86_400_000);
+    startDateInput ?? new Date(getDateTime(toDate(end)) - 7 * 86_400_000);
   const startDate = formatApiDate(start);
   const endDate = formatApiDate(end);
   if (Date.parse(toIsoDate(startDate)) > Date.parse(toIsoDate(endDate))) {
@@ -1123,14 +1190,14 @@ export function formatApiDate(value: Date | string): string {
   ) {
     throw new RangeError("Invalid sleep data date");
   }
-  const time = toDate(value).getTime();
+  const time = getDateTime(toDate(value));
   if (!Number.isFinite(time)) throw new RangeError("Invalid sleep data date");
   return new Date(time).toISOString().slice(0, 19).replace("T", " ");
 }
 
 function toDate(value: Date | string): Date {
   if (value instanceof Date) {
-    return new Date(Date.prototype.getTime.call(value));
+    return new Date(getDateTime(value));
   }
   if (typeof value !== "string") return new Date(Number.NaN);
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -1647,9 +1714,7 @@ function readSigningCredentials(
     const sessionToken = aws.sessionToken;
     const expiration = aws.expiration;
     const expirationTime =
-      expiration instanceof Date
-        ? Date.prototype.getTime.call(expiration)
-        : Number.NaN;
+      expiration instanceof Date ? getDateTime(expiration) : Number.NaN;
     if (
       !isCredentialValue(accessKeyId) ||
       !isCredentialValue(secretAccessKey) ||
@@ -1696,6 +1761,80 @@ function isSafeDisplayString(value: unknown): value is string {
       MAX_DISPLAY_STRING_BYTES &&
     !hasControlCharacter(value)
   );
+}
+
+function isInboxMessagesResponse(
+  value: unknown,
+): value is InboxMessagesResponse {
+  if (!isPlainObject(value)) return false;
+  if (!hasOwnAny(value, ["baby_notifications", "cradlewise_notifications"])) {
+    return false;
+  }
+  return [value.baby_notifications, value.cradlewise_notifications].every(
+    (messages) =>
+      messages === undefined ||
+      messages === null ||
+      (Array.isArray(messages) &&
+        messages.length <= MAX_INBOX_RECORDS &&
+        messages.every(isInboxMessage)),
+  );
+}
+
+function isInboxMessage(value: unknown): value is InboxMessage {
+  if (!isPlainObject(value)) return false;
+  const numberFields = [value.message_id];
+  const stringFields = [
+    value.message_time,
+    value.message_type,
+    value.title,
+    value.body,
+    value.content_url,
+    value.thumbnail_url,
+    value.presentation_image_url,
+    value.content_type,
+  ];
+  return (
+    numberFields.every(
+      (field) =>
+        field === undefined ||
+        field === null ||
+        (typeof field === "number" && Number.isSafeInteger(field)),
+    ) &&
+    stringFields.every(
+      (field) =>
+        field === undefined || field === null || isSafeDisplayString(field),
+    )
+  );
+}
+
+function inboxImageUrl(message: InboxMessage): string | undefined {
+  const candidates = [
+    message.presentation_image_url,
+    message.thumbnail_url,
+    message.content_type === "image" ? message.content_url : undefined,
+  ];
+  return candidates.find(isHttpsUrl);
+}
+
+function isHttpsUrl(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    utf8ByteLength(value, MAX_QUERY_PARAMETER_BYTES) > MAX_QUERY_PARAMETER_BYTES
+  ) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 function hasInvalidHeaderCharacter(value: string): boolean {

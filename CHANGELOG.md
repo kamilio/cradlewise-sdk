@@ -4,7 +4,29 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- Harden date reads against mutation of `Function.prototype.call` and `Date.prototype.getTime` after module initialization.
+- Terminate POSIX validation, reproducibility, staging, and SDK-vendoring subprocess groups on timeout or output overflow so inherited descendants cannot survive a failed command.
+- Treat forwarded terminal signals as command failures even when the child exits zero, preventing interrupted build and vendoring workflows from continuing.
+- Apply the same interrupted-command semantics and process-group termination to approved Homey run/install children and packaged MCP smoke checks.
+- Run SDK-vendoring npm commands with the reviewed Homey child environment so account credentials, `NODE_OPTIONS`, loader hooks, and unrelated tokens are not inherited.
+- Apply the same reviewed environment boundary to package, declaration, ATTW, CLI, MCP, and reproducibility smoke subprocesses while preserving only explicit redaction-test credentials.
+- Continue scanning Android DEX content past region-valid but untrusted IoT endpoint decoys until the pinned trusted endpoint is found.
+- Bound region-valid IoT endpoint candidates during DEX scanning to prevent crafted app bundles from causing unbounded fingerprint work.
+- Stop DEX decompression immediately after the trusted IoT endpoint is found so corrupt or oversized irrelevant trailing entries cannot invalidate a successful match.
+- Revalidate cached configuration file identity, permissions, size, and timestamps after reading, rejecting path swaps or in-place changes before cached secrets are accepted.
+- Cancel non-streaming XAPK response bodies when array-buffer spooling exceeds its deadline.
+- Keep crib discovery transactional by deferring updates to existing models until every profile and crib record has validated.
+- Remove extracted ZIP outputs when their final file close fails, preserving close and removal errors instead of leaving an ambiguous artifact behind.
+- Restrict inherited locale variables to the standard `LC_*` names so locale-shaped secret variables cannot cross reviewed subprocess boundaries.
+- Include permission mode in verified Homey file and directory identity checks so mode changes during inspection invalidate the artifact.
+- Allow Homey pairing and repair to authenticate and discover account cribs while live crib telemetry is offline, and distinguish invalid credentials from configuration, timeout, and post-login discovery failures.
+- Add bounded `/inbox/v2` photo discovery and a Homey Advanced Flow image token that remains usable when the crib itself is offline.
+
 ### Added
+
+- Document the inspected Android 2.57.8 XAPK, hashes, inbox routes, query parameters, media fields, and repository mapping in `docs/android-bundle-notes.md`.
 
 - A Homey SDK v3 local app under `packages/homey-app` with Compose manifests, original store assets, read-only crib sensor capabilities, account pairing and repair, bounded polling, Flow conditions, and manual refresh.
 - Store-facing description explicitly identifies the integration as unofficial and read-only.

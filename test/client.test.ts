@@ -783,6 +783,40 @@ describe("CradlewiseClient", () => {
     });
   });
 
+  it("does not partially update existing cribs when discovery fails", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { baby_id: "first", name: "Updated" },
+          { baby_id: "second", name: "Invalid" },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([{ cradle_id: "crib", timezone: "America/Chicago" }]),
+      )
+      .mockResolvedValueOnce(jsonResponse([{ cradle_id: "../invalid" }]));
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: fetchMock,
+    });
+    const existing = new Cradle({
+      cradleId: "crib",
+      babyId: "original",
+      babyName: "Original",
+      timezone: "UTC",
+    });
+    client.cradles.set("crib", existing);
+
+    await expect(client.discoverCradles()).rejects.toThrow(
+      "unexpected response",
+    );
+
+    expect(client.cradles.get("crib")).toBe(existing);
+    expect(existing.babyId).toBe("original");
+    expect(existing.babyName).toBe("Original");
+    expect(existing.timezone).toBe("UTC");
+  });
+
   it("replaces a crib cache entry stored under the wrong identifier", async () => {
     const client = new CradlewiseClient(createAuth() as never, {
       fetch: vi
@@ -2544,5 +2578,86 @@ describe("CradlewiseClient", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(auth.authenticate).toHaveBeenCalledOnce();
+  });
+
+  it("reads the inbox and selects the latest usable crib photo", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        baby_notifications: [
+          {
+            message_id: 42,
+            message_time: "2026-07-05T12:00:00Z",
+            title: "A sleepy moment",
+            content_type: "video",
+            content_url: "https://private.cradlewise.com/video.mp4",
+            thumbnail_url: "https://private.cradlewise.com/thumb.jpg",
+            presentation_image_url:
+              "https://private.cradlewise.com/presentation.jpg",
+          },
+        ],
+        cradlewise_notifications: [],
+      }),
+    );
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: fetchMock,
+    });
+
+    await expect(
+      client.getLatestCribPhoto("crib-1", "baby-1"),
+    ).resolves.toEqual({
+      url: "https://private.cradlewise.com/presentation.jpg",
+      messageId: 42,
+      messageTime: "2026-07-05T12:00:00Z",
+      title: "A sleepy moment",
+      contentType: "video",
+    });
+    const url = fetchMock.mock.calls[0]?.[0] as URL;
+    expect(url.pathname).toBe("/inbox/v2");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      page_size: "50",
+      tags: "baby",
+      baby_id: "baby-1",
+      message_type: "baby",
+      cradle_id: "crib-1",
+    });
+  });
+
+  it("falls back to image content and rejects malformed inbox responses", async () => {
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          jsonResponse({
+            baby_notifications: [
+              {
+                content_type: "video",
+                content_url: "https://private.cradlewise.com/video.mp4",
+              },
+              {
+                content_type: "image",
+                content_url: "https://private.cradlewise.com/photo.jpg",
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ message: "unavailable" }))
+        .mockResolvedValueOnce(
+          jsonResponse({ baby_notifications: [{ content_url: 1 }] }),
+        ),
+    });
+
+    await expect(client.getLatestCribPhoto("crib", "baby")).resolves.toEqual({
+      url: "https://private.cradlewise.com/photo.jpg",
+      contentType: "image",
+    });
+    await expect(client.getInboxMessages("crib", "baby")).rejects.toThrow(
+      "unexpected response",
+    );
+    await expect(client.getInboxMessages("crib", "baby")).rejects.toThrow(
+      "unexpected response",
+    );
+    await expect(client.getInboxMessages("crib", "baby", 0)).rejects.toThrow(
+      "pageSize",
+    );
   });
 });

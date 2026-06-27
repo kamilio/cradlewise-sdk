@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
 
 const directories = await Promise.all([
   mkdtemp(join(tmpdir(), "cradlewise-pack-a-")),
@@ -19,7 +20,9 @@ try {
       ["pack", "--silent", "--pack-destination", directory],
       {
         encoding: "utf8",
-        env: { ...process.env, npm_config_ignore_scripts: "true" },
+        env: Object.assign(reviewedChildEnvironment(process.env), {
+          npm_config_ignore_scripts: "true",
+        }),
         maxBuffer: 1024 * 1024,
         timeout: 120_000,
       },
