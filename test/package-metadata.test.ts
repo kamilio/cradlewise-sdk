@@ -3,6 +3,14 @@ import { describe, expect, it } from "vitest";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../src/version.js";
 
 describe("package metadata", () => {
+  it("keeps live integration failures secret-safe", async () => {
+    const integration = await readFile("scripts/integration-test.ts", "utf8");
+    expect(integration).toContain(
+      'throw new Error("Cradlewise integration test failed.")',
+    );
+    expect(integration).toContain("await runIntegrationTest().catch(() => {");
+  });
+
   it("keeps local credential files out of source and Homey artifacts", async () => {
     const [gitignore, homeyignore] = await Promise.all([
       readFile(".gitignore", "utf8"),
