@@ -237,7 +237,7 @@ npm run test:integration # requires CRADLEWISE_LOGIN and CRADLEWISE_PASSWORD in 
 
 Keep a local `.env` owner-readable only (`chmod 600 .env` on POSIX systems). The package and its reviewed production dependencies do not require install lifecycle scripts.
 
-The integration test verifies configuration cache reuse, authentication reuse, discovery, crib state, connectivity, firmware, sleep events, sleep analytics, status timelines, and nonnegative aggregate values. It performs read-only requests and never prints credentials, tokens, crib IDs, baby IDs, baby names, or raw API payloads.
+The integration test verifies configuration cache reuse, authentication reuse, and account discovery even when a crib is offline. It validates whichever crib-state, connectivity, firmware, sleep-event, analytics, and timeline sources are currently readable, including nonnegative aggregate values, without requiring live telemetry. It performs read-only requests and never prints credentials, tokens, crib IDs, baby IDs, baby names, or raw API payloads.
 
 Coverage gates apply per production file, and production source rejects explicit `any`, unsafe `any` propagation, and non-null assertions at lint time.
 

@@ -30,6 +30,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Serialize authenticated Homey photo metadata lookup with reconnect work so credential cleanup cannot interrupt an in-flight photo request.
 - Bound Homey photo response fragmentation as well as total bytes so tiny-chunk streams cannot consume unbounded memory.
 - Make the credentialed Homey integration check pass on authenticated crib discovery even when every live crib-state endpoint is offline.
+- Make the root credentialed integration check treat authenticated discovery as the baseline and validate live status, history, and analytics only when each source is currently readable.
 - Supply `/inbox/v2` with an existing registered app-device ID discovered through the read-only `userDevices` endpoint, retrying only explicitly stale IDs and never provisioning a new device.
 - Prefer the most recently connected registered app device for inbox reads while preserving stable service order when connection timestamps are unavailable.
 - Reject implausibly large declared `userDevices` counts before inbox device IDs are accepted, keeping response validation within the same bounded record budget.

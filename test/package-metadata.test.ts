@@ -9,6 +9,8 @@ describe("package metadata", () => {
       'throw new Error("Cradlewise integration test failed.")',
     );
     expect(integration).toContain("await runIntegrationTest().catch(() => {");
+    expect(integration).toContain("await Promise.allSettled([");
+    expect(integration).toContain("complete live status");
   });
 
   it("keeps local credential files out of source and Homey artifacts", async () => {

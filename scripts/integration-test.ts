@@ -56,12 +56,14 @@ async function runIntegrationTest(): Promise<void> {
   console.log(`Discovered ${cradles.size} crib(s)`);
 
   let totalEvents = 0;
+  let readableSources = 0;
+  let completeStatusCribs = 0;
   for (const cradle of cradles.values()) {
     assert.ok(cradle.babyId, "Discovered crib is missing its baby profile ID");
     const endDate = new Date();
     const startDate = new Date(endDate.getTime() - 7 * 86_400_000);
     const [state, online, firmware, eventData, serverAnalytics, timeline] =
-      await Promise.all([
+      await Promise.allSettled([
         client.getCradleState(cradle.cradleId),
         client.getCradleOnlineStatus(cradle.cradleId),
         client.getFirmwareData(cradle.cradleId),
@@ -70,61 +72,96 @@ async function runIntegrationTest(): Promise<void> {
         client.getStatusTimeline(cradle.babyId, cradle.cradleId),
       ]);
 
-    assertRecord(state, "crib state");
-    assertRecord(online, "online status");
-    assertRecord(firmware, "firmware data");
-    assertRecord(serverAnalytics, "sleep analytics");
-    assertRecord(timeline, "status timeline");
-    assert.ok(Array.isArray(eventData.events));
+    for (const [result, description] of [
+      [state, "crib state"],
+      [online, "online status"],
+      [firmware, "firmware data"],
+      [serverAnalytics, "sleep analytics"],
+      [timeline, "status timeline"],
+    ] as const) {
+      if (result.status !== "fulfilled") continue;
+      assertRecord(result.value, description);
+      readableSources += 1;
+    }
+    if (eventData.status === "fulfilled") {
+      assert.ok(Array.isArray(eventData.value.events));
+      totalEvents += eventData.value.events.length;
+      readableSources += 1;
+    }
 
-    await client.updateCradle(cradle);
-    assert.equal(cradle.statusPartial, false);
-    assert.deepEqual(cradle.unavailableStatusSources, []);
-    assert.equal(typeof cradle.babyPresent, "boolean");
-    assert.equal(typeof cradle.online, "boolean");
-    assert.equal(typeof cradle.firmwareVersion, "string");
-    assert.equal(typeof cradle.serialNumber, "string");
-    assert.equal(typeof cradle.cradleMode, "string");
-    assert.ok(
-      cradle.bounceSetting === undefined ||
-        typeof cradle.bounceSetting === "string" ||
-        typeof cradle.bounceSetting === "number",
-    );
-
-    const analytics = aggregateSleepAnalytics(
-      eventData.events,
-      serverAnalytics,
-      endDate,
-      eventData.timezone ?? cradle.timezone,
-      eventData.sleep_sessions_saved,
-    );
-    const fetchedAnalytics = await client.fetchSleepAnalytics(cradle, {
-      startDate,
-      endDate,
-    });
-    assert.equal(fetchedAnalytics.partial, false);
-    assert.deepEqual(fetchedAnalytics.unavailableSources, []);
-    for (const result of [analytics, fetchedAnalytics]) {
-      for (const [name, value] of Object.entries({
-        totalSleepMinutes: result.totalSleepMinutes,
-        totalAwakeMinutes: result.totalAwakeMinutes,
-        totalSootheCount: result.totalSootheCount,
-        napCount: result.napCount,
-        longestNapMinutes: result.longestNapMinutes,
-      })) {
+    const modelUpdate = await Promise.allSettled([client.updateCradle(cradle)]);
+    if (modelUpdate[0].status === "fulfilled") {
+      assert.equal(
+        cradle.statusPartial,
+        cradle.unavailableStatusSources.length > 0,
+      );
+      if (!cradle.statusPartial) {
+        completeStatusCribs += 1;
+        assert.equal(typeof cradle.babyPresent, "boolean");
+        assert.equal(typeof cradle.online, "boolean");
+        assert.equal(typeof cradle.firmwareVersion, "string");
+        assert.equal(typeof cradle.serialNumber, "string");
+        assert.equal(typeof cradle.cradleMode, "string");
         assert.ok(
-          Number.isSafeInteger(value) && value >= 0,
-          `${name} must be a nonnegative safe integer`,
+          cradle.bounceSetting === undefined ||
+            typeof cradle.bounceSetting === "string" ||
+            typeof cradle.bounceSetting === "number",
         );
       }
     }
 
-    totalEvents += eventData.events.length;
+    if (
+      eventData.status === "fulfilled" ||
+      serverAnalytics.status === "fulfilled"
+    ) {
+      const analytics = aggregateSleepAnalytics(
+        eventData.status === "fulfilled" ? eventData.value.events : [],
+        serverAnalytics.status === "fulfilled"
+          ? serverAnalytics.value
+          : undefined,
+        endDate,
+        eventData.status === "fulfilled"
+          ? (eventData.value.timezone ?? cradle.timezone)
+          : cradle.timezone,
+        eventData.status === "fulfilled"
+          ? eventData.value.sleep_sessions_saved
+          : undefined,
+      );
+      assertNonnegativeAnalytics(analytics);
+    }
+    const fetchedAnalytics = await Promise.allSettled([
+      client.fetchSleepAnalytics(cradle, { startDate, endDate }),
+    ]);
+    if (fetchedAnalytics[0].status === "fulfilled") {
+      assertNonnegativeAnalytics(fetchedAnalytics[0].value);
+      readableSources += 1;
+    }
   }
 
   console.log(
-    `Verified typed model state, firmware, events, analytics, and timeline for ${cradles.size} crib(s); ${totalEvents} event(s) in the seven-day range`,
+    `Verified account discovery and ${readableSources} readable cloud source(s) for ${cradles.size} crib(s); ${completeStatusCribs} crib(s) had complete live status and ${totalEvents} event(s) were available in the seven-day range`,
   );
+}
+
+function assertNonnegativeAnalytics(result: {
+  totalSleepMinutes: number;
+  totalAwakeMinutes: number;
+  totalSootheCount: number;
+  napCount: number;
+  longestNapMinutes: number;
+}): void {
+  for (const [name, value] of Object.entries({
+    totalSleepMinutes: result.totalSleepMinutes,
+    totalAwakeMinutes: result.totalAwakeMinutes,
+    totalSootheCount: result.totalSootheCount,
+    napCount: result.napCount,
+    longestNapMinutes: result.longestNapMinutes,
+  })) {
+    assert.ok(
+      Number.isSafeInteger(value) && value >= 0,
+      `${name} must be a nonnegative safe integer`,
+    );
+  }
 }
 
 function assertRecord(
