@@ -1844,7 +1844,8 @@ function isUserDevicesResponse(value: unknown): value is UserDevicesResponse {
       value.no_of_devices !== null &&
       (typeof value.no_of_devices !== "number" ||
         !Number.isSafeInteger(value.no_of_devices) ||
-        value.no_of_devices < -1))
+        value.no_of_devices < -1 ||
+        value.no_of_devices > MAX_USER_DEVICE_RECORDS))
   ) {
     return false;
   }

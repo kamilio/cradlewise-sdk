@@ -2806,9 +2806,15 @@ describe("CradlewiseClient", () => {
       fetch: vi
         .fn<typeof fetch>()
         .mockResolvedValueOnce(jsonResponse({ user_devices: "invalid" }))
+        .mockResolvedValueOnce(
+          jsonResponse({ no_of_devices: 101, user_devices: [] }),
+        )
         .mockResolvedValueOnce(userDevicesResponse([], "parent@example.com")),
     });
 
+    await expect(client.getUserDeviceIds("baby")).rejects.toThrow(
+      "unexpected response",
+    );
     await expect(client.getUserDeviceIds("baby")).rejects.toThrow(
       "unexpected response",
     );

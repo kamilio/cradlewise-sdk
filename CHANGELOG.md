@@ -29,6 +29,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Bound Homey photo response fragmentation as well as total bytes so tiny-chunk streams cannot consume unbounded memory.
 - Make the credentialed Homey integration check pass on authenticated crib discovery even when every live crib-state endpoint is offline.
 - Supply `/inbox/v2` with an existing registered app-device ID discovered through the read-only `userDevices` endpoint, retrying only explicitly stale IDs and never provisioning a new device.
+- Reject implausibly large declared `userDevices` counts before inbox device IDs are accepted, keeping response validation within the same bounded record budget.
 - Replace Homey photo-lookup failures with a fixed Flow error so malformed account responses cannot expose caregiver metadata or signed media URLs.
 - Align Homey pairing's discovery cap with the SDK's validated 100-crib limit instead of rejecting otherwise valid accounts at 65 cribs.
 - Align Homey's crib-identifier bound with the SDK's 256-byte model and request limit so corrupt legacy device data fails before cloud access.
