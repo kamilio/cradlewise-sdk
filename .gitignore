@@ -23,6 +23,8 @@ __MACOSX/
 ._*
 cradlewise_app_config.json
 *.apk
+*.aab
+*.apks
 *.xapk
 *.dex
 jadx-output/
