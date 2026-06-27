@@ -103,3 +103,14 @@ Account authentication and crib discovery are separate from live crib telemetry.
 - The ordering guarantee for `baby_notifications` is inferred from the mobile screen's use of the first page and should be rechecked after Android app updates.
 - Media URL hostnames and expiry periods are response-dependent. Homey therefore validates each URL at use time and does not persist it.
 - No live account request was needed for this inspection. A credentialed integration test may be run manually, but it must not log response URLs because they may contain temporary signatures.
+
+## Refresh checklist
+
+When a newer Android bundle is inspected, update this document in the same change that updates any derived SDK behavior:
+
+1. Record the inspection date, app version, version code, package name, SDK levels, artifact sizes, and SHA-256 hashes.
+2. Compare the base APK entry and DEX count before trusting prior extraction assumptions.
+3. Recheck `/inbox/v2`, `/inbox`, every query name, response field, content type, and the mobile screen's page size and ordering behavior.
+4. Recompute the trusted application-configuration fingerprints if Cognito, API, or IoT values changed; do not accept a new value solely because its hostname shape looks plausible.
+5. Rerun the SDK and Homey tests, regenerate the vendored SDK archive, prepare a reproducible Homey stage, and install only that verified stage.
+6. Delete all downloaded bundles, extracted APKs, DEX files, decompiler output, and expiring media URLs after the non-secret findings are recorded.

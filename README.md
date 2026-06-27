@@ -110,11 +110,13 @@ The library calculates nap summaries from event intervals and then prefers serve
 
 If exactly one sleep source fails, `fetchSleepAnalytics()` returns the usable fallback with `partial: true` and names the missing source in `unavailableSources`. It throws if both sources fail or if the selected crib has no associated baby identifier. Each request snapshots the crib's baby identifier and timezone, and concurrent calls are generation-ordered so an older result cannot replace a newer cached result.
 
-## Legacy realtime research transport
+## Saved inbox photos
 
 Android bundle findings used to maintain configuration discovery and the read-only inbox/photo integration are recorded in `docs/android-bundle-notes.md`. The repository does not commit APKs, XAPKs, decompiled sources, or temporary media URLs.
 
 `CradlewiseClient.getInboxMessages(cradleId, babyId)` reads the bounded saved-notification feed discovered in the Android app. `getLatestCribPhoto(cradleId, babyId)` selects the latest usable presentation image, thumbnail, or image content URL. These methods retrieve saved media metadata; they do not expose a live crib camera stream.
+
+## Legacy realtime research transport
 
 The legacy transport is excluded from default installs. Install its optional peer only when deliberately testing a verified legacy account:
 
@@ -208,7 +210,7 @@ All package errors extend `CradlewiseError`:
 
 ## Homey app
 
-`packages/homey-app` contains an unofficial Homey SDK v3 app built on the packed SDK. It exposes read-only crib sensors, connectivity, battery and power status, Homey Insights history, Flow conditions and automatic capability triggers, manual refresh, credential repair, and bounded polling on Homey Pro.
+`packages/homey-app` contains an unofficial Homey SDK v3 app built on the packed SDK. It exposes read-only crib sensors, connectivity, battery and power status, Homey Insights history, Flow conditions and automatic capability triggers, manual refresh, a saved-photo Advanced Flow image token, credential repair, and bounded polling on Homey Pro.
 
 The integration is not a safety-critical baby monitor and must not replace the official Cradlewise app.
 
