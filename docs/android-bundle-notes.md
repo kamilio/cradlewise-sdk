@@ -22,6 +22,17 @@ Inspection date: **2026-07-05**
 
 The bundle was obtained through the same APKPure metadata and approved CDN-host flow implemented by `src/config.ts`. Time-limited download URLs are intentionally not recorded. Neither the XAPK nor decompiled sources are committed.
 
+## Derived trust fingerprints
+
+The non-secret SHA-256 pins in `src/discovery-trust.ts` were derived from the reviewed bundle configuration:
+
+| Purpose                         | SHA-256                                                            |
+| ------------------------------- | ------------------------------------------------------------------ |
+| Cognito/API configuration tuple | `5314aee9b23b585706300d6b7d86ad6d74125c39772b21003ce953c2e5315413` |
+| AWS IoT endpoint                | `bd1d018c23681cc4457abc1f288a1b37810e5157a31116b1798a2c5c5678ba75` |
+
+The tuple hash covers the user pool, app client ID, app client secret, identity pool, region, and API base URL in that fixed order. The underlying values are intentionally not duplicated in this research note. A future bundle must not replace either pin without a fresh artifact review and matching tests.
+
 ## Reproduction outline
 
 1. Use the explicit Android configuration-discovery path in `src/config.ts` to obtain the current XAPK in a private temporary directory.
