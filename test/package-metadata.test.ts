@@ -43,6 +43,9 @@ describe("package metadata", () => {
     ]) {
       expect(gitignore.split(/\r?\n/u)).toContain(path);
     }
+    for (const path of ["*.apk", "*.xapk", "*.dex", "jadx-output/"]) {
+      expect(gitignore.split(/\r?\n/u)).toContain(path);
+    }
   });
 
   it("keeps runtime identity synchronized with package.json", async () => {
