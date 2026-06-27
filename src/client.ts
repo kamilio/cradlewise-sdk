@@ -745,24 +745,38 @@ export class CradlewiseClient {
       throw unexpectedResponse("baby profile user devices", result);
     }
     const expectedEmail = this.#email.toLowerCase();
-    const ids: string[] = [];
-    const seen = new Set<string>();
+    const candidates = new Map<
+      string,
+      { deviceId: string; lastConnectedTime: number; order: number }
+    >();
+    let order = 0;
     for (const user of result.user_devices ?? []) {
       if (user.email_id?.trim().toLowerCase() !== expectedEmail) continue;
       for (const device of user.devices ?? []) {
         const deviceId = device.device_id;
-        if (
-          typeof deviceId !== "string" ||
-          !isIdentifier(deviceId) ||
-          seen.has(deviceId)
-        ) {
+        if (typeof deviceId !== "string" || !isIdentifier(deviceId)) {
           continue;
         }
-        seen.add(deviceId);
-        ids.push(deviceId);
+        const lastConnectedTime =
+          typeof device.last_connected_time === "number"
+            ? device.last_connected_time
+            : Number.NEGATIVE_INFINITY;
+        const existing = candidates.get(deviceId);
+        if (!existing) {
+          candidates.set(deviceId, { deviceId, lastConnectedTime, order });
+          order += 1;
+        } else if (lastConnectedTime > existing.lastConnectedTime) {
+          existing.lastConnectedTime = lastConnectedTime;
+        }
       }
     }
-    return ids;
+    return [...candidates.values()]
+      .sort(
+        (left, right) =>
+          right.lastConnectedTime - left.lastConnectedTime ||
+          left.order - right.order,
+      )
+      .map(({ deviceId }) => deviceId);
   }
 
   async getLatestCribPhoto(

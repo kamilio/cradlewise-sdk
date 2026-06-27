@@ -2724,7 +2724,7 @@ describe("CradlewiseClient", () => {
     });
   });
 
-  it("uses only the signed-in user's registered devices and retries stale IDs", async () => {
+  it("prefers recent signed-in user devices and retries explicitly stale IDs", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -2738,9 +2738,9 @@ describe("CradlewiseClient", () => {
             {
               email_id: "PARENT@example.com",
               devices: [
-                { device_id: "stale-device" },
-                { device_id: "active-device" },
-                { device_id: "active-device" },
+                { device_id: "stale-device", last_connected_time: 10 },
+                { device_id: "active-device", last_connected_time: 20 },
+                { device_id: "active-device", last_connected_time: 30 },
               ],
             },
           ],
@@ -2760,8 +2760,8 @@ describe("CradlewiseClient", () => {
     });
 
     await expect(client.getUserDeviceIds("baby")).resolves.toEqual([
-      "stale-device",
       "active-device",
+      "stale-device",
     ]);
     fetchMock.mockReset();
     fetchMock
@@ -2772,8 +2772,8 @@ describe("CradlewiseClient", () => {
             {
               email_id: "parent@example.com",
               devices: [
-                { device_id: "stale-device" },
-                { device_id: "active-device" },
+                { device_id: "stale-device", last_connected_time: 30 },
+                { device_id: "active-device", last_connected_time: 20 },
               ],
             },
           ],

@@ -114,7 +114,7 @@ If exactly one sleep source fails, `fetchSleepAnalytics()` returns the usable fa
 
 Android bundle findings used to maintain configuration discovery and the read-only inbox/photo integration are recorded in `docs/android-bundle-notes.md`. The repository does not commit APKs, XAPKs, decompiled sources, or temporary media URLs.
 
-`CradlewiseClient.getUserDeviceIds(babyId)` reads existing registered app-device identifiers for the signed-in account without provisioning a new device. `getInboxMessages(cradleId, babyId)` uses those identifiers to read the bounded saved-notification feed discovered in the Android app, retrying a different current identifier only when the API explicitly rejects one as stale. `getLatestCribPhoto(cradleId, babyId)` selects the latest usable presentation image, thumbnail, or image content URL. These methods retrieve saved media metadata; they do not expose a live crib camera stream or mutate the account.
+`CradlewiseClient.getUserDeviceIds(babyId)` reads existing registered app-device identifiers for the signed-in account without provisioning a new device and prefers the most recently connected registration when that metadata is available. `getInboxMessages(cradleId, babyId)` uses those identifiers to read the bounded saved-notification feed discovered in the Android app, retrying a different current identifier only when the API explicitly rejects one as stale. `getLatestCribPhoto(cradleId, babyId)` selects the latest usable presentation image, thumbnail, or image content URL. These methods retrieve saved media metadata; they do not expose a live crib camera stream or mutate the account.
 
 ## Legacy realtime research transport
 
