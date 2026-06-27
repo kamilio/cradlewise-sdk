@@ -64,7 +64,11 @@ The GET method accepts these optional query parameters:
 - `next_token`
 - `message_id`
 
-The Video Moments screen calls the endpoint with a page size of `50`, `tags=baby`, `message_type=baby`, the current baby ID, the current cradle ID, and optionally a message ID. `device_id` is supplied by the Android app but is optional in the service wrapper.
+The Video Moments screen calls the endpoint with a page size of `50`, `tags=baby`, `message_type=baby`, the current baby ID, the current cradle ID, and optionally a message ID. Although `device_id` is nullable in the Kotlin service wrapper, a live read on 2026-07-05 returned HTTP 400 with `device_id is invalid.` when it was omitted.
+
+The screen obtains `device_id` from `AppUtils.getDeviceId()`. Android persists that value from the `deviceId` field returned by the certificate/bootstrap device configuration; it is not the crib ID. Creating a new value through `POST /cradles/pairedUsers/v3` is state-changing and remains outside this repository's read-only boundary.
+
+An existing registered identifier can instead be discovered without mutation through `GET /babyProfiles/{babyId}/userDevices?email_id={accountEmail}`. Its response contains `user_devices`; each matching account entry contains a `devices` list with `device_id`, device metadata, registration time, and last-connected time. The observed response used `no_of_devices=-1` as an unspecified-count sentinel while still returning populated device lists. The live account check confirmed that an existing registered device ID is accepted by `/inbox/v2`. The SDK filters entries to the signed-in e-mail address, deduplicates valid identifiers, and retries the next registered ID only when the service explicitly rejects one as invalid.
 
 The response model exposes:
 
@@ -99,6 +103,7 @@ Known `content_type` values are `image`, `video`, `audio`, and `normal`. For a H
 ## Repository mapping
 
 - `CradlewiseClient.getInboxMessages()` performs the signed, read-only `GET /inbox/v2` request and validates a bounded response.
+- `CradlewiseClient.getUserDeviceIds()` reads existing registered app-device identifiers from the account's `userDevices` endpoint; it never provisions or removes a device.
 - `CradlewiseClient.getLatestCribPhoto()` selects the newest timestamped usable HTTPS still-image URL, falling back to service order when timestamps are unavailable.
 - The Homey `Get the latest crib photo` Flow action returns an image token.
 - Homey downloads that image without Cradlewise authorization headers, refuses redirects, IP literals, single-label hosts, and special-use local DNS names, accepts JPEG/PNG/WebP only after matching the byte signature, and enforces Homey's 5 MB image limit.
@@ -112,6 +117,7 @@ Account authentication and crib discovery are separate from live crib telemetry.
 
 - The inbox service is undocumented and may change without notice.
 - The ordering guarantee for `baby_notifications` is inferred from the mobile screen's use of the first page and should be rechecked after Android app updates.
+- Registered app-device IDs may be rotated or removed. Inbox lookup therefore retries only IDs returned by the current account response and only after the API explicitly reports an invalid device ID.
 - Media URL hostnames and expiry periods are response-dependent. Homey therefore validates each URL at use time and does not persist it.
 - No live account request was needed for this inspection. A credentialed integration test may be run manually, but it must not log response URLs because they may contain temporary signatures.
 
@@ -121,7 +127,7 @@ When a newer Android bundle is inspected, update this document in the same chang
 
 1. Record the inspection date, app version, version code, package name, SDK levels, artifact sizes, and SHA-256 hashes.
 2. Compare the base APK entry and DEX count before trusting prior extraction assumptions.
-3. Recheck `/inbox/v2`, `/inbox`, every query name, response field, content type, and the mobile screen's page size and ordering behavior.
+3. Recheck `/inbox/v2`, `/inbox`, `/babyProfiles/{babyId}/userDevices`, every query name, response field, device-ID source, content type, and the mobile screen's page size and ordering behavior.
 4. Recompute the trusted application-configuration fingerprints if Cognito, API, or IoT values changed; do not accept a new value solely because its hostname shape looks plausible.
 5. Rerun the SDK and Homey tests, regenerate the vendored SDK archive, prepare a reproducible Homey stage, and install only that verified stage.
 6. Delete all downloaded bundles, extracted APKs, DEX files, decompiler output, and expiring media URLs after the non-secret findings are recorded.

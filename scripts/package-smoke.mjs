@@ -34,6 +34,7 @@ import { cradlewiseToolcraftRoot } from "../dist/toolcraft.js";
 if (typeof CradlewiseClient !== "function")
   throw new Error("Root export is not loadable");
 if (
+  typeof CradlewiseClient.prototype.getUserDeviceIds !== "function" ||
   typeof CradlewiseClient.prototype.getInboxMessages !== "function" ||
   typeof CradlewiseClient.prototype.getLatestCribPhoto !== "function"
 ) {

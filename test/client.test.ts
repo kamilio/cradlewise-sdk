@@ -47,6 +47,21 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function userDevicesResponse(
+  deviceIds = ["device-1"],
+  email = "parent@example.com",
+): Response {
+  return jsonResponse({
+    no_of_devices: deviceIds.length,
+    user_devices: [
+      {
+        email_id: email,
+        devices: deviceIds.map((device_id) => ({ device_id })),
+      },
+    ],
+  });
+}
+
 describe("CradlewiseClient", () => {
   it("formats API dates and rejects invalid ranges", async () => {
     expect(formatApiDate(new Date("2026-01-02T03:04:05Z"))).toBe(
@@ -2581,23 +2596,26 @@ describe("CradlewiseClient", () => {
   });
 
   it("reads the inbox and selects the latest usable crib photo", async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonResponse({
-        baby_notifications: [
-          {
-            message_id: 42,
-            message_time: "2026-07-05T12:00:00Z",
-            title: "A sleepy moment",
-            content_type: "video",
-            content_url: "https://private.cradlewise.com/video.mp4",
-            thumbnail_url: "https://private.cradlewise.com/thumb.jpg",
-            presentation_image_url:
-              "https://private.cradlewise.com/presentation.jpg",
-          },
-        ],
-        cradlewise_notifications: [],
-      }),
-    );
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(userDevicesResponse())
+      .mockResolvedValueOnce(
+        jsonResponse({
+          baby_notifications: [
+            {
+              message_id: 42,
+              message_time: "2026-07-05T12:00:00Z",
+              title: "A sleepy moment",
+              content_type: "video",
+              content_url: "https://private.cradlewise.com/video.mp4",
+              thumbnail_url: "https://private.cradlewise.com/thumb.jpg",
+              presentation_image_url:
+                "https://private.cradlewise.com/presentation.jpg",
+            },
+          ],
+          cradlewise_notifications: [],
+        }),
+      );
     const client = new CradlewiseClient(createAuth() as never, {
       fetch: fetchMock,
     });
@@ -2611,9 +2629,15 @@ describe("CradlewiseClient", () => {
       title: "A sleepy moment",
       contentType: "video",
     });
-    const url = fetchMock.mock.calls[0]?.[0] as URL;
+    const devicesUrl = fetchMock.mock.calls[0]?.[0] as URL;
+    expect(devicesUrl.pathname).toBe("/babyProfiles/baby-1/userDevices");
+    expect(Object.fromEntries(devicesUrl.searchParams)).toEqual({
+      email_id: "parent@example.com",
+    });
+    const url = fetchMock.mock.calls[1]?.[0] as URL;
     expect(url.pathname).toBe("/inbox/v2");
     expect(Object.fromEntries(url.searchParams)).toEqual({
+      device_id: "device-1",
       page_size: "50",
       tags: "baby",
       baby_id: "baby-1",
@@ -2626,6 +2650,7 @@ describe("CradlewiseClient", () => {
     const client = new CradlewiseClient(createAuth() as never, {
       fetch: vi
         .fn<typeof fetch>()
+        .mockResolvedValueOnce(userDevicesResponse())
         .mockResolvedValueOnce(
           jsonResponse({
             baby_notifications: [
@@ -2640,7 +2665,9 @@ describe("CradlewiseClient", () => {
             ],
           }),
         )
+        .mockResolvedValueOnce(userDevicesResponse())
         .mockResolvedValueOnce(jsonResponse({ message: "unavailable" }))
+        .mockResolvedValueOnce(userDevicesResponse())
         .mockResolvedValueOnce(
           jsonResponse({ baby_notifications: [{ content_url: 1 }] }),
         ),
@@ -2663,28 +2690,31 @@ describe("CradlewiseClient", () => {
 
   it("selects the newest timestamped crib photo deterministically", async () => {
     const client = new CradlewiseClient(createAuth() as never, {
-      fetch: vi.fn<typeof fetch>().mockResolvedValue(
-        jsonResponse({
-          baby_notifications: [
-            {
-              message_id: 1,
-              message_time: "2026-07-04T12:00:00Z",
-              content_type: "image",
-              content_url: "https://private.cradlewise.com/older.jpg",
-            },
-            {
-              message_id: 2,
-              message_time: "not-a-time",
-              thumbnail_url: "https://private.cradlewise.com/unknown.jpg",
-            },
-            {
-              message_id: 3,
-              message_time: "2026-07-05T12:00:00Z",
-              thumbnail_url: "https://private.cradlewise.com/newer.jpg",
-            },
-          ],
-        }),
-      ),
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(userDevicesResponse())
+        .mockResolvedValueOnce(
+          jsonResponse({
+            baby_notifications: [
+              {
+                message_id: 1,
+                message_time: "2026-07-04T12:00:00Z",
+                content_type: "image",
+                content_url: "https://private.cradlewise.com/older.jpg",
+              },
+              {
+                message_id: 2,
+                message_time: "not-a-time",
+                thumbnail_url: "https://private.cradlewise.com/unknown.jpg",
+              },
+              {
+                message_id: 3,
+                message_time: "2026-07-05T12:00:00Z",
+                thumbnail_url: "https://private.cradlewise.com/newer.jpg",
+              },
+            ],
+          }),
+        ),
     });
 
     await expect(client.getLatestCribPhoto("crib", "baby")).resolves.toEqual({
@@ -2692,5 +2722,98 @@ describe("CradlewiseClient", () => {
       messageId: 3,
       messageTime: "2026-07-05T12:00:00Z",
     });
+  });
+
+  it("uses only the signed-in user's registered devices and retries stale IDs", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          no_of_devices: -1,
+          user_devices: [
+            {
+              email_id: "caregiver@example.com",
+              devices: [{ device_id: "other-device" }],
+            },
+            {
+              email_id: "PARENT@example.com",
+              devices: [
+                { device_id: "stale-device" },
+                { device_id: "active-device" },
+                { device_id: "active-device" },
+              ],
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { errorType: "API_FAILED", message: "device_id is invalid." },
+          400,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ baby_notifications: [], cradlewise_notifications: [] }),
+      );
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: fetchMock,
+    });
+
+    await expect(client.getUserDeviceIds("baby")).resolves.toEqual([
+      "stale-device",
+      "active-device",
+    ]);
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          no_of_devices: 2,
+          user_devices: [
+            {
+              email_id: "parent@example.com",
+              devices: [
+                { device_id: "stale-device" },
+                { device_id: "active-device" },
+              ],
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { errorType: "API_FAILED", message: "device_id is invalid." },
+          400,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ baby_notifications: [], cradlewise_notifications: [] }),
+      );
+
+    await expect(client.getInboxMessages("crib", "baby")).resolves.toEqual({
+      baby_notifications: [],
+      cradlewise_notifications: [],
+    });
+    expect(
+      (fetchMock.mock.calls[1]?.[0] as URL).searchParams.get("device_id"),
+    ).toBe("stale-device");
+    expect(
+      (fetchMock.mock.calls[2]?.[0] as URL).searchParams.get("device_id"),
+    ).toBe("active-device");
+  });
+
+  it("rejects malformed or unavailable registered-device data", async () => {
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse({ user_devices: "invalid" }))
+        .mockResolvedValueOnce(userDevicesResponse([], "parent@example.com")),
+    });
+
+    await expect(client.getUserDeviceIds("baby")).rejects.toThrow(
+      "unexpected response",
+    );
+    await expect(client.getInboxMessages("crib", "baby")).rejects.toThrow(
+      "No registered Cradlewise app device",
+    );
   });
 });

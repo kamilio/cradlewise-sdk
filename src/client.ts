@@ -25,6 +25,7 @@ import type {
   SleepDataRangeOptions,
   SleepEvent,
   SleepEventsResponse,
+  UserDevicesResponse,
 } from "./types.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 
@@ -35,6 +36,7 @@ const MAX_JSON_DEPTH = 100;
 const MAX_JSON_NODES = 1_000_000;
 const MAX_SLEEP_RECORDS = 100_000;
 const MAX_INBOX_RECORDS = 100;
+const MAX_USER_DEVICE_RECORDS = 100;
 const MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const MAX_RESPONSE_CHUNKS = 8192;
@@ -695,19 +697,72 @@ export class CradlewiseClient {
     if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) {
       throw new RangeError("pageSize must be an integer from 1 through 100");
     }
-    const result = await this.request<unknown>("GET", "/inbox/v2", {
-      query: {
-        page_size: pageSize,
-        tags: "baby",
-        baby_id: requireQueryValue(babyId, "babyId"),
-        message_type: "baby",
-        cradle_id: requireQueryValue(cradleId, "cradleId"),
-      },
-    });
-    if (!isInboxMessagesResponse(result)) {
-      throw unexpectedResponse("inbox v2", result);
+    const normalizedBabyId = requireQueryValue(babyId, "babyId");
+    const normalizedCradleId = requireQueryValue(cradleId, "cradleId");
+    const deviceIds = await this.getUserDeviceIds(normalizedBabyId);
+    if (deviceIds.length === 0) {
+      throw new CradlewiseApiError(
+        "No registered Cradlewise app device is available for inbox access",
+      );
     }
-    return result;
+    let invalidDeviceError: CradlewiseApiError | undefined;
+    for (const deviceId of deviceIds) {
+      try {
+        const result = await this.request<unknown>("GET", "/inbox/v2", {
+          query: {
+            device_id: deviceId,
+            page_size: pageSize,
+            tags: "baby",
+            baby_id: normalizedBabyId,
+            message_type: "baby",
+            cradle_id: normalizedCradleId,
+          },
+        });
+        if (!isInboxMessagesResponse(result)) {
+          throw unexpectedResponse("inbox v2", result);
+        }
+        return result;
+      } catch (error) {
+        if (!isInvalidInboxDeviceError(error)) throw error;
+        invalidDeviceError = error;
+      }
+    }
+    throw (
+      invalidDeviceError ??
+      new CradlewiseApiError(
+        "No registered Cradlewise app device is available for inbox access",
+      )
+    );
+  }
+
+  async getUserDeviceIds(babyId: string): Promise<string[]> {
+    const result = await this.request<unknown>(
+      "GET",
+      `/babyProfiles/${encodePathIdentifier(babyId, "babyId")}/userDevices`,
+      { query: { email_id: this.#email } },
+    );
+    if (!isUserDevicesResponse(result)) {
+      throw unexpectedResponse("baby profile user devices", result);
+    }
+    const expectedEmail = this.#email.toLowerCase();
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const user of result.user_devices ?? []) {
+      if (user.email_id?.trim().toLowerCase() !== expectedEmail) continue;
+      for (const device of user.devices ?? []) {
+        const deviceId = device.device_id;
+        if (
+          typeof deviceId !== "string" ||
+          !isIdentifier(deviceId) ||
+          seen.has(deviceId)
+        ) {
+          continue;
+        }
+        seen.add(deviceId);
+        ids.push(deviceId);
+      }
+    }
+    return ids;
   }
 
   async getLatestCribPhoto(
@@ -1777,6 +1832,72 @@ function isInboxMessagesResponse(
       (Array.isArray(messages) &&
         messages.length <= MAX_INBOX_RECORDS &&
         messages.every(isInboxMessage)),
+  );
+}
+
+function isUserDevicesResponse(value: unknown): value is UserDevicesResponse {
+  if (!isPlainObject(value) || !Array.isArray(value.user_devices)) return false;
+  const users: unknown[] = value.user_devices;
+  if (
+    users.length > MAX_USER_DEVICE_RECORDS ||
+    (value.no_of_devices !== undefined &&
+      value.no_of_devices !== null &&
+      (typeof value.no_of_devices !== "number" ||
+        !Number.isSafeInteger(value.no_of_devices) ||
+        value.no_of_devices < -1))
+  ) {
+    return false;
+  }
+  let deviceCount = 0;
+  for (const user of users) {
+    if (!isPlainObject(user)) return false;
+    const emailId = user.email_id;
+    const devicesValue = user.devices;
+    if (
+      (emailId !== undefined &&
+        emailId !== null &&
+        !isSafeDisplayString(emailId)) ||
+      (devicesValue !== undefined &&
+        devicesValue !== null &&
+        !Array.isArray(devicesValue))
+    ) {
+      return false;
+    }
+    const devices: unknown[] = Array.isArray(devicesValue) ? devicesValue : [];
+    for (const device of devices) {
+      deviceCount += 1;
+      if (!isPlainObject(device)) return false;
+      const deviceId = device.device_id;
+      const lastConnectedTime = device.last_connected_time;
+      if (
+        deviceCount > MAX_USER_DEVICE_RECORDS ||
+        (deviceId !== undefined &&
+          deviceId !== null &&
+          !isSafeDisplayString(deviceId)) ||
+        (lastConnectedTime !== undefined &&
+          lastConnectedTime !== null &&
+          (typeof lastConnectedTime !== "number" ||
+            !Number.isFinite(lastConnectedTime) ||
+            !Number.isSafeInteger(lastConnectedTime)))
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function isInvalidInboxDeviceError(
+  error: unknown,
+): error is CradlewiseApiError {
+  if (!(error instanceof CradlewiseApiError) || error.status !== 400) {
+    return false;
+  }
+  const body = error.responseBody;
+  return (
+    isPlainObject(body) &&
+    body.errorType === "API_FAILED" &&
+    body.message === "device_id is invalid."
   );
 }
 

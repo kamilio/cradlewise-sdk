@@ -45,6 +45,21 @@ export interface CradleRecord extends JsonObject {
   timezone?: string | null;
 }
 
+export interface UserDeviceInfo extends JsonObject {
+  device_id?: string | null;
+  last_connected_time?: number | null;
+}
+
+export interface UserDeviceEntry extends JsonObject {
+  email_id?: string | null;
+  devices?: UserDeviceInfo[] | null;
+}
+
+export interface UserDevicesResponse extends JsonObject {
+  no_of_devices?: number | null;
+  user_devices?: UserDeviceEntry[] | null;
+}
+
 export interface CradleState extends JsonObject {
   babyPresent?: boolean;
   baby_present?: boolean;

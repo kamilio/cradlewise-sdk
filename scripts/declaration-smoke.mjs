@@ -37,6 +37,7 @@ const cradle: CradleData = {
 };
 const options: CradlewiseApiErrorOptions = { status: 503 };
 const event: CradlewiseRealtimeEventMap["state"] = ["crib", {}, "topic"];
+const deviceIds: Promise<string[]> = client.getUserDeviceIds("baby");
 const inbox: Promise<InboxMessagesResponse> = client.getInboxMessages(
   "crib",
   "baby",
@@ -57,6 +58,7 @@ void profile;
 void cradle;
 void options;
 void event;
+void deviceIds;
 void inbox;
 void photo;
 void isTrustedDiscoveredAppConfig(appConfig);
