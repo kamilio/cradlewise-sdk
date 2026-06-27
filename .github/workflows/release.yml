@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    environment: npm
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24.14.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Verify repository identity
+        run: test "$GITHUB_REPOSITORY" = "kjopek/cradlewise-js"
+      - name: Verify tagged commit is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Verify release tag matches package version
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+      - name: Install trusted-publishing npm CLI
+        run: |
+          NPM_CLI_DIR="$(mktemp -d "$RUNNER_TEMP/reviewed-npm.XXXXXX")"
+          trap 'rm -rf "$NPM_CLI_DIR"' EXIT
+          cd "$NPM_CLI_DIR"
+          TARBALL="$(npm pack npm@11.18.0 --ignore-scripts --silent)"
+          test "$TARBALL" = "npm-11.18.0.tgz"
+          node "$GITHUB_WORKSPACE/scripts/verify-file-sri.mjs" "$TARBALL" "sha512-T67M4L5wNm0cZ7EBLErcEkY1SmzEW/WJ+SADBzsFUY1UdAPfFHXFQtZ6SEXiK0+vzXysCvAsepbMaBTwnrAD+w=="
+          npm install --global "$NPM_CLI_DIR/$TARBALL" --ignore-scripts
+          test "$(npm --version)" = "11.18.0"
+      - name: Detect first publish
+        id: package-status
+        run: |
+          PACKAGE_STATUS_FILE="$RUNNER_TEMP/cradlewise-package-status.json"
+          trap 'rm -f "$PACKAGE_STATUS_FILE"' EXIT
+          if npm view cradlewise version --json >"$PACKAGE_STATUS_FILE"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif node -e 'try { const value = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")); process.exit(value?.error?.code === "E404" ? 0 : 1); } catch { process.exit(1); }' "$PACKAGE_STATUS_FILE"; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unable to determine whether the npm package already exists" >&2
+            exit 1
+          fi
+      - name: Verify first-publish authentication
+        if: steps.package-status.outputs.exists != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if test -z "$NODE_AUTH_TOKEN"; then
+            echo "NPM_TOKEN is required for the first publish before trusted publishing can be configured" >&2
+            exit 1
+          fi
+      - run: npm ci --ignore-scripts
+      - run: npm audit
+      - run: npm audit --omit=dev
+      - run: npm audit signatures --omit=optional
+      - run: npm run release:check
+      - run: npm run check
+      - run: npm run homey:verify
+      - run: node packages/homey-app/scripts/prepare-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"
+      - run: node packages/homey-app/scripts/verify-prepared-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"
+      - run: npm audit --prefix packages/homey-app
+      - run: npm audit --prefix packages/homey-app --omit=dev
+      - run: npm audit signatures --omit=optional
+        working-directory: packages/homey-app
+      - name: Select Homey runtime Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22.22.0
+          package-manager-cache: false
+      - run: npm run typecheck --prefix packages/homey-app
+      - run: npm test --prefix packages/homey-app
+      - run: npm run smoke:build --prefix packages/homey-app
+      - name: Restore publishing Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24.14.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Restore trusted-publishing npm CLI
+        run: |
+          NPM_CLI_DIR="$(mktemp -d "$RUNNER_TEMP/reviewed-npm.XXXXXX")"
+          trap 'rm -rf "$NPM_CLI_DIR"' EXIT
+          cd "$NPM_CLI_DIR"
+          TARBALL="$(npm pack npm@11.18.0 --ignore-scripts --silent)"
+          test "$TARBALL" = "npm-11.18.0.tgz"
+          node "$GITHUB_WORKSPACE/scripts/verify-file-sri.mjs" "$TARBALL" "sha512-T67M4L5wNm0cZ7EBLErcEkY1SmzEW/WJ+SADBzsFUY1UdAPfFHXFQtZ6SEXiK0+vzXysCvAsepbMaBTwnrAD+w=="
+          npm install --global "$NPM_CLI_DIR/$TARBALL" --ignore-scripts
+          test "$(npm --version)" = "11.18.0"
+      - name: Pack verified artifact
+        id: artifact
+        run: |
+          TARBALL="$(npm pack --ignore-scripts --silent)"
+          sha256sum "$TARBALL"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+      - name: Publish with trusted publishing
+        if: steps.package-status.outputs.exists == 'true'
+        run: npm publish "${{ steps.artifact.outputs.tarball }}" --ignore-scripts --provenance --access public
+      - name: Publish first release with token
+        if: steps.package-status.outputs.exists != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish "${{ steps.artifact.outputs.tarball }}" --ignore-scripts --provenance --access public

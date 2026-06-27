@@ -1,0 +1,121 @@
+{
+  "name": "cradlewise",
+  "version": "0.1.0",
+  "description": "Unofficial TypeScript client for the Cradlewise smart crib API",
+  "keywords": [
+    "cradlewise",
+    "smart-crib",
+    "aws-iot",
+    "mqtt",
+    "typescript",
+    "mcp",
+    "toolcraft"
+  ],
+  "homepage": "https://github.com/kjopek/cradlewise-js#readme",
+  "bugs": {
+    "url": "https://github.com/kjopek/cradlewise-js/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kjopek/cradlewise-js.git"
+  },
+  "license": "MIT",
+  "author": "Kamil Jopek",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./toolcraft": {
+      "types": "./dist/toolcraft.d.ts",
+      "import": "./dist/toolcraft.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "cradlewise": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "node scripts/clean.mjs dist && tsc -p tsconfig.build.json && node scripts/finalize-build.mjs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run smoke:types && npm run smoke:package && npm run lint:package && npm run pack:check && npm run pack:reproducible",
+    "clean": "node scripts/clean.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "homey:install": "node packages/homey-app/scripts/development-runtime.mjs && npm run build && npm run homey:vendor && npm install --prefix packages/homey-app --ignore-scripts",
+    "homey:prepare": "npm run homey:install",
+    "homey:stage": "npm run homey:verify && node packages/homey-app/scripts/prepare-homey-stage.mjs && npm run homey:stage:verify",
+    "homey:stage:verify": "node packages/homey-app/scripts/verify-prepared-homey-stage.mjs",
+    "homey:vendor": "node scripts/vendor-homey-sdk.mjs",
+    "homey:verify": "node packages/homey-app/scripts/development-runtime.mjs && npm run build && npm run homey:vendor && npm install --prefix packages/homey-app --ignore-scripts && npm run verify --prefix packages/homey-app",
+    "lint": "eslint . --max-warnings 0",
+    "pack:check": "npm pack --dry-run",
+    "pack:reproducible": "node scripts/reproducible-pack.mjs",
+    "prepublishOnly": "npm run release:check && npm run check",
+    "release:check": "node scripts/release-check.mjs",
+    "smoke:types": "node scripts/declaration-smoke.mjs",
+    "smoke:package": "node scripts/package-smoke.mjs",
+    "test": "vitest run --coverage",
+    "test:integration": "node --env-file=.env --import tsx scripts/integration-test.ts",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint:package": "publint && node scripts/attw-package.mjs"
+  },
+  "dependencies": {
+    "@aws-crypto/sha256-js": "5.2.0",
+    "@aws-sdk/client-cognito-identity": "3.1079.0",
+    "@aws-sdk/client-cognito-identity-provider": "3.1079.0",
+    "@smithy/protocol-http": "5.5.6",
+    "@smithy/signature-v4": "5.6.2",
+    "cognito-srp-helper": "2.3.5"
+  },
+  "optionalDependencies": {
+    "toolcraft": "0.0.87"
+  },
+  "peerDependencies": {
+    "aws-iot-device-sdk-v2": "^1.27.0"
+  },
+  "peerDependenciesMeta": {
+    "aws-iot-device-sdk-v2": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.4",
+    "@eslint/js": "^9.30.1",
+    "@types/node": "^24.0.10",
+    "@vitest/coverage-v8": "^3.2.4",
+    "aws-iot-device-sdk-v2": "^1.27.0",
+    "eslint": "^9.30.1",
+    "fflate": "0.8.3",
+    "prettier": "^3.6.2",
+    "publint": "0.3.21",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.1",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "aws-iot-device-sdk-v2": {
+      "uuid": "11.1.1"
+    }
+  }
+}

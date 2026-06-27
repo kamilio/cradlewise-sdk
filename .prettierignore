@@ -1,0 +1,7 @@
+dist
+coverage
+node_modules
+packages/homey-app/.homeybuild
+packages/homey-app/app.json
+package-lock.json
+*.tgz
