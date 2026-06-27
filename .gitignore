@@ -24,6 +24,8 @@ __MACOSX/
 cradlewise_app_config.json
 *.apk
 *.xapk
+*.dex
+jadx-output/
 *.pem
 *.key
 *.p12
