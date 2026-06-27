@@ -53,10 +53,15 @@ describe("package metadata", () => {
     }
     for (const path of [
       "*.apk",
+      "*.APK",
       "*.aab",
+      "*.AAB",
       "*.apks",
+      "*.APKS",
       "*.xapk",
+      "*.XAPK",
       "*.dex",
+      "*.DEX",
       "jadx-output/",
     ]) {
       expect(gitignore.split(/\r?\n/u)).toContain(path);
