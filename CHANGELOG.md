@@ -24,6 +24,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Allow Homey pairing and repair to authenticate and discover account cribs while live crib telemetry is offline, and distinguish invalid credentials from configuration, timeout, and post-login discovery failures.
 - Keep generic authentication transport failures distinct from rejected credentials so Homey suggests checking connectivity instead of reporting a false password error.
 - Apply the same credential-versus-operational error classification to Homey repair, including missing cribs and reconnect failures, while keeping the repair queue usable after an error.
+- Surface actionable Homey messages for Cognito password-reset, unconfirmed-account, and rate-limit states instead of collapsing them into invalid credentials.
 - Align Homey pairing's discovery cap with the SDK's validated 100-crib limit instead of rejecting otherwise valid accounts at 65 cribs.
 - Align Homey's crib-identifier bound with the SDK's 256-byte model and request limit so corrupt legacy device data fails before cloud access.
 - Normalize trailing-dot photo hostnames before local-host checks so DNS-equivalent `localhost.` and `.local.` targets cannot bypass Homey's media SSRF boundary.
