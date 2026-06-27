@@ -24,13 +24,17 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Allow Homey pairing and repair to authenticate and discover account cribs while live crib telemetry is offline, and distinguish invalid credentials from configuration, timeout, and post-login discovery failures.
 - Keep generic authentication transport failures distinct from rejected credentials so Homey suggests checking connectivity instead of reporting a false password error.
 - Apply the same credential-versus-operational error classification to Homey repair, including missing cribs and reconnect failures, while keeping the repair queue usable after an error.
+- Align Homey pairing's discovery cap with the SDK's validated 100-crib limit instead of rejecting otherwise valid accounts at 65 cribs.
+- Align Homey's crib-identifier bound with the SDK's 256-byte model and request limit so corrupt legacy device data fails before cloud access.
 - Normalize trailing-dot photo hostnames before local-host checks so DNS-equivalent `localhost.` and `.local.` targets cannot bypass Homey's media SSRF boundary.
+- Reject single-label and common special-use local DNS names for Homey media so resolver search domains cannot turn a backend URL into a local-network request.
 - Coalesce concurrent Homey photo actions and unregister their shared image during device teardown to avoid duplicate registrations and leaked image resources.
 - Document offline pairing and the Advanced Flow image-token workflow, including that it retrieves saved inbox media rather than a live camera stream.
 - Select the latest saved crib photo by validated message timestamp instead of relying solely on inbox response order.
 - Enforce Homey's documented 5 MB image limit as exactly 5,000,000 bytes rather than the larger 5 MiB binary unit.
 - Strip upstream media-fetch causes from Homey photo failures so signed temporary URLs cannot leak through diagnostics.
 - Validate JPEG, PNG, and WebP byte signatures before exposing downloaded media to Homey, and keep oversize errors deterministic when stream cancellation fails.
+- Drop temporary signed photo metadata when Homey cannot update its image token instead of retaining a failed media URL until the next action or teardown.
 - Add bounded `/inbox/v2` photo discovery and a Homey Advanced Flow image token that remains usable when the crib itself is offline.
 
 ### Added

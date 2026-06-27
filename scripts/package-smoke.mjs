@@ -33,6 +33,12 @@ import { cradlewiseToolcraftRoot } from "../dist/toolcraft.js";
 
 if (typeof CradlewiseClient !== "function")
   throw new Error("Root export is not loadable");
+if (
+  typeof CradlewiseClient.prototype.getInboxMessages !== "function" ||
+  typeof CradlewiseClient.prototype.getLatestCribPhoto !== "function"
+) {
+  throw new Error("Published inbox photo methods are not loadable");
+}
 const cliMetadata = requireSafeArtifact("dist/cli.js", 16 * 1024 * 1024);
 if (process.platform !== "win32" && (cliMetadata.mode & 0o111) === 0)
   throw new Error("Published CLI entry point must be executable");

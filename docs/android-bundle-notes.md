@@ -90,7 +90,7 @@ Known `content_type` values are `image`, `video`, `audio`, and `normal`. For a H
 - `CradlewiseClient.getInboxMessages()` performs the signed, read-only `GET /inbox/v2` request and validates a bounded response.
 - `CradlewiseClient.getLatestCribPhoto()` selects the newest timestamped usable HTTPS still-image URL, falling back to service order when timestamps are unavailable.
 - The Homey `Get the latest crib photo` Flow action returns an image token.
-- Homey downloads that image without Cradlewise authorization headers, refuses redirects and local/IP targets, accepts JPEG/PNG/WebP only, and enforces Homey's 5 MB image limit.
+- Homey downloads that image without Cradlewise authorization headers, refuses redirects, IP literals, single-label hosts, and special-use local DNS names, accepts JPEG/PNG/WebP only after matching the byte signature, and enforces Homey's 5 MB image limit.
 - Photo lookup uses account discovery and the inbox service, so it does not require the crib's live status endpoints to be available.
 
 ## Pairing implication

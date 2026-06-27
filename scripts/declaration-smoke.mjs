@@ -12,16 +12,20 @@ try {
     join(directory, "consumer.ts"),
     `import {
   AppConfig,
+  CradlewiseClient,
   CradlewiseRealtime,
   isTrustedDiscoveredAppConfig,
   type BabyProfile,
+  type CradlePhoto,
   type CradleData,
   type CradlewiseApiErrorOptions,
   type CradlewiseRealtimeEventMap,
+  type InboxMessagesResponse,
 } from "cradlewise";
 import { cradlewiseToolcraftRoot } from "cradlewise/toolcraft";
 
 declare const realtime: CradlewiseRealtime;
+declare const client: CradlewiseClient;
 declare const appConfig: AppConfig;
 const profile: BabyProfile = { baby_id: "baby" };
 const cradle: CradleData = {
@@ -33,6 +37,14 @@ const cradle: CradleData = {
 };
 const options: CradlewiseApiErrorOptions = { status: 503 };
 const event: CradlewiseRealtimeEventMap["state"] = ["crib", {}, "topic"];
+const inbox: Promise<InboxMessagesResponse> = client.getInboxMessages(
+  "crib",
+  "baby",
+);
+const photo: Promise<CradlePhoto | undefined> = client.getLatestCribPhoto(
+  "crib",
+  "baby",
+);
 realtime.on("state", (cradleId, state, topic) => {
   cradleId.toUpperCase();
   Object.keys(state);
@@ -45,6 +57,8 @@ void profile;
 void cradle;
 void options;
 void event;
+void inbox;
+void photo;
 void isTrustedDiscoveredAppConfig(appConfig);
 void cradlewiseToolcraftRoot;
 `,
