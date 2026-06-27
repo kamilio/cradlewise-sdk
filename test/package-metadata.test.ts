@@ -13,7 +13,7 @@ describe("package metadata", () => {
     expect(integration).toContain("complete live status");
   });
 
-  it("keeps local credential files out of source and Homey artifacts", async () => {
+  it("keeps credentials and Android research artifacts out of builds", async () => {
     const [gitignore, homeyignore] = await Promise.all([
       readFile(".gitignore", "utf8"),
       readFile("packages/homey-app/.homeyignore", "utf8"),
