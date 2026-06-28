@@ -23,6 +23,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Include permission mode in verified Homey file and directory identity checks so mode changes during inspection invalidate the artifact.
 - Allow Homey pairing and repair to authenticate and discover account cribs while live crib telemetry is offline, and distinguish invalid credentials from configuration, timeout, and post-login discovery failures.
 - Keep verified replacement credentials when Homey repair reaches an offline crib, release the stale authenticated client, and retry the new account on the normal polling schedule.
+- Retain an authenticated Homey client when crib telemetry is unavailable, mark the device degraded, and reuse that session for polling recovery and saved-photo lookup instead of reauthenticating every interval.
 - Keep generic authentication transport failures distinct from rejected credentials so Homey suggests checking connectivity instead of reporting a false password error.
 - Strip upstream error causes from Homey pairing and repair rejections so hidden response data cannot be serialized by the pairing UI or platform logs.
 - Apply the same credential-versus-operational error classification to Homey repair, including missing cribs and reconnect failures, while keeping the repair queue usable after an error.
