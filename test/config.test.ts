@@ -317,6 +317,56 @@ describe("AppConfig", () => {
     expect(isTrustedDiscoveredAppConfig(spoofed)).toBe(false);
   });
 
+  it("does not use an overridden serializer after discovery trust", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    const cachePath = join(directory, "config.json");
+    const descriptor = Object.getOwnPropertyDescriptor(
+      AppConfig.prototype,
+      "toJSON",
+    );
+    Object.defineProperty(AppConfig.prototype, "toJSON", {
+      configurable: true,
+      writable: true,
+      value: () => ({
+        ...data,
+        cognitoAppClientId: "attacker-client",
+        apiBaseUrl:
+          "https://attacker.execute-api.us-east-1.amazonaws.com/production",
+      }),
+    });
+
+    try {
+      await expect(
+        getAppConfig({
+          cachePath,
+          fetch: validDownloadFetch(),
+          forceRefresh: true,
+        }),
+      ).resolves.toMatchObject({
+        cognitoAppClientId: "client",
+        apiBaseUrl: "https://backend.cradlewise.com/api",
+      });
+      const cached = JSON.parse(await readFile(cachePath, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      expect(cached.cognitoAppClientId).toBe("client");
+      expect(cached.apiBaseUrl).toBe("https://backend.cradlewise.com/api");
+      const fetchMock = vi.fn<typeof fetch>();
+      await expect(
+        getAppConfig({ cachePath, fetch: fetchMock }),
+      ).resolves.toMatchObject({
+        cognitoAppClientId: "client",
+        apiBaseUrl: "https://backend.cradlewise.com/api",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(AppConfig.prototype, "toJSON", descriptor);
+      }
+    }
+  });
+
   it("snapshots explicit configuration fields once", () => {
     const reads = new Map<string, number>();
     const input = {} as Record<string, unknown>;

@@ -156,16 +156,20 @@ export class AppConfig {
   }
 
   toJSON(): AppConfigData {
-    return {
-      cognitoUserPoolId: this.cognitoUserPoolId,
-      cognitoAppClientId: this.cognitoAppClientId,
-      cognitoAppClientSecret: this.cognitoAppClientSecret,
-      cognitoIdentityPoolId: this.cognitoIdentityPoolId,
-      cognitoRegion: this.cognitoRegion,
-      apiBaseUrl: this.apiBaseUrl,
-      ...(this.iotEndpoint ? { iotEndpoint: this.iotEndpoint } : {}),
-    };
+    return snapshotAppConfigData(this);
   }
+}
+
+function snapshotAppConfigData(config: AppConfig): AppConfigData {
+  return {
+    cognitoUserPoolId: config.cognitoUserPoolId,
+    cognitoAppClientId: config.cognitoAppClientId,
+    cognitoAppClientSecret: config.cognitoAppClientSecret,
+    cognitoIdentityPoolId: config.cognitoIdentityPoolId,
+    cognitoRegion: config.cognitoRegion,
+    apiBaseUrl: config.apiBaseUrl,
+    ...(config.iotEndpoint ? { iotEndpoint: config.iotEndpoint } : {}),
+  };
 }
 
 export async function getAppConfig(
@@ -378,7 +382,7 @@ async function writeCachedConfig(
         );
         const data: CachedConfig = {
           cacheVersion: CACHE_VERSION,
-          ...config.toJSON(),
+          ...snapshotAppConfigData(config),
         };
         await writeFile(temporaryPath, `${JSON.stringify(data, null, 2)}\n`, {
           flag: "wx",
@@ -529,7 +533,7 @@ async function extractAppConfig(
             ? discoveredIotEndpoint
             : undefined;
         return iotEndpoint
-          ? new AppConfig({ ...baseConfig.toJSON(), iotEndpoint })
+          ? new AppConfig({ ...snapshotAppConfigData(baseConfig), iotEndpoint })
           : baseConfig;
       },
       async () => {
