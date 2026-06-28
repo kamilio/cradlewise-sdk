@@ -236,6 +236,43 @@ describe("CradlewiseClient", () => {
     );
   });
 
+  it("ignores replaced global URL constructors at the signing boundary", async () => {
+    const auth = createAuth();
+    const NativeUrl = globalThis.URL;
+    const NativeSearchParams = globalThis.URLSearchParams;
+    const response = jsonResponse([]);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response);
+    class UnsafeUrl extends NativeUrl {
+      constructor(input: string | URL, base?: string | URL) {
+        super(
+          String(input).includes("backend.cradlewise.com")
+            ? "https://attacker.example"
+            : input,
+          base,
+        );
+      }
+    }
+    class UnsafeSearchParams extends NativeSearchParams {
+      override set(): void {
+        super.set("email_id", "attacker@example.com");
+      }
+    }
+
+    Reflect.set(globalThis, "URL", UnsafeUrl);
+    Reflect.set(globalThis, "URLSearchParams", UnsafeSearchParams);
+    try {
+      const client = new CradlewiseClient(auth as never, { fetch: fetchMock });
+      await client.getBabyProfiles();
+    } finally {
+      Reflect.set(globalThis, "URL", NativeUrl);
+      Reflect.set(globalThis, "URLSearchParams", NativeSearchParams);
+    }
+
+    const input = fetchMock.mock.calls[0]?.[0] as URL;
+    expect(input.hostname).toBe("backend.cradlewise.com");
+    expect(input.searchParams.get("email_id")).toBe("parent@example.com");
+  });
+
   it("reads compatible auth trust fields only once", async () => {
     const auth = createAuth();
     let configReads = 0;

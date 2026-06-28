@@ -1,6 +1,7 @@
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { HttpRequest } from "@smithy/protocol-http";
 import { SignatureV4 } from "@smithy/signature-v4";
+import { URL, URLSearchParams } from "node:url";
 import { aggregateSleepAnalytics, parseEventTime } from "./analytics.js";
 import type { CradlewiseAuth } from "./auth.js";
 import { snapshotUint8Array } from "./byte-utils.js";
