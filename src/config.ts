@@ -1079,8 +1079,14 @@ async function readResponseBytes(
 
 function readContentLength(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
-  if (!/^(?:0|[1-9]\d*)$/.test(value)) {
+  if (value.length === 0 || (value.length > 1 && value[0] === "0")) {
     throw new TypeError("Response content-length header is invalid");
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    const characterCode = value.charCodeAt(index);
+    if (characterCode < 48 || characterCode > 57) {
+      throw new TypeError("Response content-length header is invalid");
+    }
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) {

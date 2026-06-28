@@ -1388,6 +1388,41 @@ describe("getAppConfig", () => {
     }
   });
 
+  it("parses download lengths without mutable regular expressions", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    const originalTest = Object.getOwnPropertyDescriptor(
+      RegExp.prototype,
+      "test",
+    )?.value as RegExp["test"];
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() => {
+      RegExp.prototype.test = () => true;
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        headers: { get: () => "-1" },
+        body: null,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      } as never);
+    });
+
+    try {
+      await expect(
+        getAppConfig({
+          cachePath: join(directory, "invalid-length.json"),
+          fetch: fetchMock,
+          forceRefresh: true,
+        }),
+      ).rejects.toMatchObject({
+        name: "CradlewiseConfigError",
+        cause: expect.objectContaining({
+          message: "Response content-length header is invalid",
+        }),
+      });
+    } finally {
+      RegExp.prototype.test = originalTest;
+    }
+  });
+
   it("cancels rejected metadata and bundle response bodies", async () => {
     const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
     const metadataCancel = vi.fn(() => new Promise<void>(() => undefined));
