@@ -31,6 +31,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Serialize the complete Homey photo action with connection changes, and clear registered images whenever credentials or clients are replaced so a prior account's temporary media selection cannot survive repair or reconnect.
 - Unregister stale Homey image resources after a definitive no-photo response while preserving the last valid image across transient lookup failures.
 - Return fixed cause-free validation errors for malformed Homey login, settings, and device descriptors so hostile platform accessors cannot attach private diagnostic details.
+- Use captured collection and string intrinsics for Homey Cognito classification and media URL/MIME checks so later prototype replacement cannot disable login messaging or local-network photo rejection.
 - Bound Homey photo response fragmentation as well as total bytes so tiny-chunk streams cannot consume unbounded memory.
 - Make the credentialed Homey integration check pass on authenticated crib discovery even when every live crib-state endpoint is offline.
 - Make the root credentialed integration check treat authenticated discovery as the baseline and validate live status, history, and analytics only when each source is currently readable.
