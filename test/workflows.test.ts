@@ -18,8 +18,15 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("npm ci --ignore-scripts");
     expect(workflow).toContain("npm audit signatures --omit=optional");
     expect(workflow).toContain("working-directory: packages/homey-app");
+    expect(workflow).toContain("npm run homey:vendor");
     expect(workflow).toContain(
-      "npm run homey:vendor\n      - run: npm ci --ignore-scripts --prefix packages/homey-app\n      - run: npm run build --prefix packages/homey-app",
+      "git diff --exit-code -- packages/homey-app/package-lock.json packages/homey-app/vendor",
+    );
+    expect(
+      workflow.match(/Verify committed Homey vendor is current/g),
+    ).toHaveLength(2);
+    expect(workflow).toContain(
+      "npm ci --ignore-scripts --prefix packages/homey-app\n      - run: npm run build --prefix packages/homey-app",
     );
     expect(workflow).toContain(
       'node packages/homey-app/scripts/prepare-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"',
@@ -79,6 +86,10 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("working-directory: packages/homey-app");
     expect(workflow).toContain(
       "npm run release:check\n      - run: npm run check",
+    );
+    expect(workflow).toContain("Verify committed Homey vendor is current");
+    expect(workflow).toContain(
+      "git diff --exit-code -- packages/homey-app/package-lock.json packages/homey-app/vendor",
     );
     expect(workflow).toContain(
       'node packages/homey-app/scripts/prepare-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"',
