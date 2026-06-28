@@ -52,6 +52,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Bound Homey photo MIME and length headers before parsing, and parse byte lengths without mutable regular-expression or string-iterator behavior.
 - Require exact boolean completion flags and stable byte snapshots from Homey photo stream chunks before accepting media data.
 - Contain Homey image creation, stream registration, and update failures behind fixed cause-free Flow errors while preserving partial-image cleanup and retry state.
+- Replace Homey image-stream write failures with a fixed cause-free Flow error so platform adapter details cannot leak through image-token consumption.
+- Pin Homey credential, crib-ID, and display validation to captured regular-expression, string, Unicode, and byte-length intrinsics so later prototype replacement cannot bypass bounds or sanitization.
+- Pin the private Homey configuration-load cache to captured `WeakMap` methods so prototype replacement cannot disrupt trusted config restoration or coalescing.
 - Enforce the Homey photo deadline across both response acquisition and streamed body reads even when fetch, read, or cancellation ignores abort; keep cleanup non-blocking, and use the Node URL constructor so replacement of the writable global cannot weaken local-network rejection.
 - Fail CI and release gates when SDK vendoring rewrites the committed Homey lockfile or archive, preventing stale vendored runtime bytes from passing after an automatic refresh.
 - Exercise the Android-derived nested inbox metadata declarations under both exact optional-property modes.
