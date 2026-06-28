@@ -2847,4 +2847,22 @@ describe("CradlewiseClient", () => {
       "No registered Cradlewise app device",
     );
   });
+
+  it("treats null or omitted registered-device lists as empty", async () => {
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          jsonResponse({ no_of_devices: 0, user_devices: null }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ no_of_devices: 0 }))
+        .mockResolvedValueOnce(jsonResponse({ user_devices: null })),
+    });
+
+    await expect(client.getUserDeviceIds("baby")).resolves.toEqual([]);
+    await expect(client.getUserDeviceIds("baby")).resolves.toEqual([]);
+    await expect(client.getInboxMessages("crib", "baby")).rejects.toThrow(
+      "No registered Cradlewise app device",
+    );
+  });
 });

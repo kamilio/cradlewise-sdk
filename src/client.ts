@@ -1850,8 +1850,16 @@ function isInboxMessagesResponse(
 }
 
 function isUserDevicesResponse(value: unknown): value is UserDevicesResponse {
-  if (!isPlainObject(value) || !Array.isArray(value.user_devices)) return false;
-  const users: unknown[] = value.user_devices;
+  if (!isPlainObject(value)) return false;
+  const usersValue = value.user_devices;
+  if (
+    usersValue !== undefined &&
+    usersValue !== null &&
+    !Array.isArray(usersValue)
+  ) {
+    return false;
+  }
+  const users: unknown[] = Array.isArray(usersValue) ? usersValue : [];
   if (
     users.length > MAX_USER_DEVICE_RECORDS ||
     (value.no_of_devices !== undefined &&
