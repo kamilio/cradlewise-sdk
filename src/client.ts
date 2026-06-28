@@ -1847,13 +1847,26 @@ function isInboxMessagesResponse(
   ) {
     return false;
   }
-  return [value.baby_notifications, value.cradlewise_notifications].every(
-    (messages) =>
-      messages === undefined ||
-      messages === null ||
-      (Array.isArray(messages) &&
-        messages.length <= MAX_INBOX_RECORDS &&
-        messages.every(isInboxMessage)),
+  return (
+    [value.baby_notifications, value.cradlewise_notifications].every(
+      (messages) =>
+        messages === undefined ||
+        messages === null ||
+        (Array.isArray(messages) &&
+          messages.length <= MAX_INBOX_RECORDS &&
+          messages.every(isInboxMessage)),
+    ) &&
+    (value.enable_red_dot === undefined ||
+      value.enable_red_dot === null ||
+      typeof value.enable_red_dot === "boolean") &&
+    (value.all_tags === undefined ||
+      value.all_tags === null ||
+      (Array.isArray(value.all_tags) &&
+        value.all_tags.length <= MAX_INBOX_RECORDS &&
+        value.all_tags.every(isSafeDisplayString))) &&
+    (value.eol_message === undefined ||
+      value.eol_message === null ||
+      isSafeDisplayString(value.eol_message))
   );
 }
 

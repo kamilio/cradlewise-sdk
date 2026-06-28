@@ -120,6 +120,9 @@ export interface InboxMessage extends JsonObject {
 export interface InboxMessagesResponse extends JsonObject {
   baby_notifications?: InboxMessage[] | null;
   cradlewise_notifications?: InboxMessage[] | null;
+  enable_red_dot?: boolean | null;
+  all_tags?: string[] | null;
+  eol_message?: string | null;
 }
 
 export interface CradlePhoto {

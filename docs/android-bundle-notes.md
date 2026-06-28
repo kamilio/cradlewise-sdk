@@ -70,13 +70,15 @@ The screen obtains `device_id` from `AppUtils.getDeviceId()`. Android persists t
 
 An existing registered identifier can instead be discovered without mutation through `GET /babyProfiles/{babyId}/userDevices?email_id={accountEmail}`. Its response contains `user_devices`; each matching account entry contains a `devices` list with `device_id`, device metadata, registration time, and last-connected time. The observed response used `no_of_devices=-1` as an unspecified-count sentinel while still returning populated device lists. The live account check confirmed that an existing registered device ID is accepted by `/inbox/v2`. The SDK filters entries to the signed-in e-mail address, deduplicates valid identifiers, prefers the most recently connected registration when timestamps are present, and retries the next registered ID only when the service explicitly rejects one as invalid.
 
-The response model exposes:
+The response model exposes these bounded envelope fields:
 
 - `baby_notifications`
 - `cradlewise_notifications`
 - `enable_red_dot`
 - `all_tags`
 - `eol_message`
+
+The Android model represents `enable_red_dot` as a boolean, `all_tags` as a string list, and `eol_message` as a nullable string. The SDK validates those types even when the notification arrays are omitted.
 
 Each message may include:
 

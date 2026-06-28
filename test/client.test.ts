@@ -2707,6 +2707,25 @@ describe("CradlewiseClient", () => {
     );
   });
 
+  it("rejects malformed empty inbox envelope fields", async () => {
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(userDevicesResponse())
+        .mockResolvedValueOnce(jsonResponse({ enable_red_dot: "false" }))
+        .mockResolvedValueOnce(userDevicesResponse())
+        .mockResolvedValueOnce(jsonResponse({ all_tags: ["baby", 1] }))
+        .mockResolvedValueOnce(userDevicesResponse())
+        .mockResolvedValueOnce(jsonResponse({ eol_message: { text: "done" } })),
+    });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(client.getInboxMessages("crib", "baby")).rejects.toThrow(
+        "unexpected response",
+      );
+    }
+  });
+
   it("selects the newest timestamped crib photo deterministically", async () => {
     const client = new CradlewiseClient(createAuth() as never, {
       fetch: vi
