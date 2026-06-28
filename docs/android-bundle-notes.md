@@ -102,8 +102,8 @@ Known `content_type` values are `image`, `video`, `audio`, and `normal`. For a H
 
 ## Repository mapping
 
-- `CradlewiseClient.getInboxMessages()` performs the signed, read-only `GET /inbox/v2` request and validates a bounded response.
-- `CradlewiseClient.getUserDeviceIds()` reads existing registered app-device identifiers from the account's `userDevices` endpoint; it never provisions or removes a device.
+- `CradlewiseClient.getInboxMessages()` performs the signed, read-only `GET /inbox/v2` request and validates a bounded response. A recognized empty envelope containing fields such as `enable_red_dot`, `all_tags`, or `eol_message` remains a valid no-media result even when both notification arrays are omitted.
+- `CradlewiseClient.getUserDeviceIds()` reads existing registered app-device identifiers from the account's `userDevices` endpoint; it never provisions or removes a device. Null or omitted `user_devices` lists are treated as an empty registration set so Homey can provide its explicit official-app guidance.
 - `CradlewiseClient.getLatestCribPhoto()` selects the newest timestamped usable HTTPS still-image URL, falling back to service order when timestamps are unavailable.
 - The Homey `Get the latest crib photo` Flow action returns an image token.
 - Homey downloads that image without Cradlewise authorization headers, refuses redirects, IP literals, single-label hosts, and special-use local DNS names, accepts JPEG/PNG/WebP only after matching the byte signature, and enforces Homey's 5 MB image limit.
