@@ -30,6 +30,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Surface actionable Homey messages for Cognito password-reset, unconfirmed-account, and rate-limit states instead of collapsing them into invalid credentials.
 - Serialize authenticated Homey photo metadata lookup with reconnect work so credential cleanup cannot interrupt an in-flight photo request.
 - Serialize the complete Homey photo action with connection changes, and clear registered images whenever credentials or clients are replaced so a prior account's temporary media selection cannot survive repair or reconnect.
+- Track the normalized Homey account e-mail independently of live-client availability so changing accounts also clears temporary photo tokens created during an offline session, while same-account recovery preserves them.
 - Preserve a freshly returned Homey photo token when normal polling restores a previously absent client, preventing same-account offline recovery from invalidating the next image-consuming Flow card.
 - Unregister stale Homey image resources after a definitive no-photo response while preserving the last valid image across transient lookup failures.
 - Return fixed cause-free validation errors for malformed Homey login, settings, and device descriptors so hostile platform accessors cannot attach private diagnostic details.
