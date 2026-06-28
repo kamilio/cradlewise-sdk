@@ -49,6 +49,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Reject arbitrary successful `userDevices` objects that contain neither a device list nor a recognized count field instead of misclassifying them as an empty registration.
 - Contain hostile Homey photo response, header, body, and reader descriptors behind fixed cause-free errors so platform diagnostics cannot leak signed media details.
 - Reject non-string Homey photo `content-length` values without invoking attacker-controlled coercion or exposing its failure text.
+- Bound Homey photo MIME and length headers before parsing, and parse byte lengths without mutable regular-expression or string-iterator behavior.
+- Enforce the Homey photo download deadline even when a fetch implementation ignores abort, and use the Node URL constructor so replacement of the writable global cannot weaken local-network rejection.
+- Fail CI and release gates when SDK vendoring rewrites the committed Homey lockfile or archive, preventing stale vendored runtime bytes from passing after an automatic refresh.
+- Exercise the Android-derived nested inbox metadata declarations under both exact optional-property modes.
 - Align Homey pairing's discovery cap with the SDK's validated 100-crib limit instead of rejecting otherwise valid accounts at 65 cribs.
 - Align Homey's crib-identifier bound with the SDK's 256-byte model and request limit so corrupt legacy device data fails before cloud access.
 - Normalize trailing-dot photo hostnames before local-host checks so DNS-equivalent `localhost.` and `.local.` targets cannot bypass Homey's media SSRF boundary.
