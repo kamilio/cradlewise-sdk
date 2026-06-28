@@ -53,6 +53,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Enforce the Homey photo download deadline even when a fetch implementation ignores abort, and use the Node URL constructor so replacement of the writable global cannot weaken local-network rejection.
 - Fail CI and release gates when SDK vendoring rewrites the committed Homey lockfile or archive, preventing stale vendored runtime bytes from passing after an automatic refresh.
 - Exercise the Android-derived nested inbox metadata declarations under both exact optional-property modes.
+- Parse API response `content-length` headers without mutable regular-expression behavior while retaining strict decimal and size validation.
 - Align Homey pairing's discovery cap with the SDK's validated 100-crib limit instead of rejecting otherwise valid accounts at 65 cribs.
 - Align Homey's crib-identifier bound with the SDK's 256-byte model and request limit so corrupt legacy device data fails before cloud access.
 - Normalize trailing-dot photo hostnames before local-host checks so DNS-equivalent `localhost.` and `.local.` targets cannot bypass Homey's media SSRF boundary.

@@ -2046,6 +2046,36 @@ describe("CradlewiseClient", () => {
     );
   });
 
+  it("parses response lengths without mutable regular expressions", async () => {
+    const originalTest = Object.getOwnPropertyDescriptor(
+      RegExp.prototype,
+      "test",
+    )?.value as RegExp["test"];
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi.fn<typeof fetch>().mockImplementation(() => {
+        RegExp.prototype.test = () => true;
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          headers: { get: () => "-1" },
+          body: null,
+          text: () => Promise.resolve("{}"),
+        } as never);
+      }),
+    });
+
+    try {
+      await expect(client.request("GET", "/bad-length")).rejects.toMatchObject({
+        name: "CradlewiseApiError",
+        cause: expect.objectContaining({
+          message: "Response content-length header is invalid",
+        }),
+      });
+    } finally {
+      RegExp.prototype.test = originalTest;
+    }
+  });
+
   it("rejects malformed UTF-8 in streamed response bodies", async () => {
     const cancel = vi.fn();
     const client = new CradlewiseClient(createAuth() as never, {
