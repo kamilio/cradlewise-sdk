@@ -194,7 +194,6 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Kept reconnect commits atomic across Homey availability and timer setup failures, and prevented deletion during capability synchronization from installing a replacement poll timer or retaining the candidate client.
 - Kept the Homey connectivity alarm unchanged when the dedicated online-status endpoint is unavailable, instead of interpreting a newly discovered crib's default state as a confirmed offline result.
 - Kept a Homey crib degraded when its primary state endpoint is unavailable even if auxiliary online or firmware endpoints still respond, avoiding a false fully-available status with stale sensor values.
-- Excluded primary-state-unavailable cribs from pairing and rejected repair before changing stored credentials, rather than adding or reauthorizing a device that cannot supply its monitored status.
 - Preserved the prior attention alarm when the cloud supplies a mix of known-false and missing attention flags; cleared it only when every contributing flag is known false.
 - Replaced unknown upstream Homey-facing and logged error messages with context-specific fixed wording, preserving only an allowlist of app-authored messages so crib IDs, account details, URLs, and response text cannot leak through exception strings.
 - Contained malformed error objects whose `message` accessor throws, keeping logging and availability cleanup paths deterministic.
