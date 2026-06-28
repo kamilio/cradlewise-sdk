@@ -78,7 +78,7 @@ The response model exposes these bounded envelope fields:
 - `all_tags`
 - `eol_message`
 
-The Android model represents `enable_red_dot` as a boolean, `all_tags` as a string list, and `eol_message` as a nullable string. The SDK validates those types even when the notification arrays are omitted.
+The Android model represents each of `enable_red_dot`, `all_tags`, and `eol_message` as a nullable object with `baby_notifications` and `cradlewise_notifications` members. Those members contain booleans, string lists, and nullable strings respectively. The SDK validates these nested types even when the top-level notification arrays are omitted.
 
 Each message may include:
 

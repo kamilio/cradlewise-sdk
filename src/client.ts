@@ -1856,17 +1856,40 @@ function isInboxMessagesResponse(
           messages.length <= MAX_INBOX_RECORDS &&
           messages.every(isInboxMessage)),
     ) &&
-    (value.enable_red_dot === undefined ||
-      value.enable_red_dot === null ||
-      typeof value.enable_red_dot === "boolean") &&
-    (value.all_tags === undefined ||
-      value.all_tags === null ||
-      (Array.isArray(value.all_tags) &&
-        value.all_tags.length <= MAX_INBOX_RECORDS &&
-        value.all_tags.every(isSafeDisplayString))) &&
-    (value.eol_message === undefined ||
-      value.eol_message === null ||
-      isSafeDisplayString(value.eol_message))
+    isInboxGroup(value.enable_red_dot, isNullableBoolean) &&
+    isInboxGroup(value.all_tags, isNullableStringArray) &&
+    isInboxGroup(value.eol_message, isNullableDisplayString)
+  );
+}
+
+function isInboxGroup(
+  value: unknown,
+  isGroupValue: (value: unknown) => boolean,
+): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (isPlainObject(value) &&
+      isGroupValue(value.baby_notifications) &&
+      isGroupValue(value.cradlewise_notifications))
+  );
+}
+
+function isNullableBoolean(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === "boolean";
+}
+
+function isNullableDisplayString(value: unknown): boolean {
+  return value === undefined || value === null || isSafeDisplayString(value);
+}
+
+function isNullableStringArray(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (Array.isArray(value) &&
+      value.length <= MAX_INBOX_RECORDS &&
+      value.every(isSafeDisplayString))
   );
 }
 

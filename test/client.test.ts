@@ -2695,9 +2695,18 @@ describe("CradlewiseClient", () => {
         .mockResolvedValueOnce(userDevicesResponse())
         .mockResolvedValueOnce(
           jsonResponse({
-            enable_red_dot: false,
-            all_tags: [],
-            eol_message: null,
+            enable_red_dot: {
+              baby_notifications: false,
+              cradlewise_notifications: true,
+            },
+            all_tags: {
+              baby_notifications: ["baby"],
+              cradlewise_notifications: [],
+            },
+            eol_message: {
+              baby_notifications: null,
+              cradlewise_notifications: "End of notifications",
+            },
           }),
         ),
     });
@@ -2714,9 +2723,15 @@ describe("CradlewiseClient", () => {
         .mockResolvedValueOnce(userDevicesResponse())
         .mockResolvedValueOnce(jsonResponse({ enable_red_dot: "false" }))
         .mockResolvedValueOnce(userDevicesResponse())
-        .mockResolvedValueOnce(jsonResponse({ all_tags: ["baby", 1] }))
+        .mockResolvedValueOnce(
+          jsonResponse({ all_tags: { baby_notifications: ["baby", 1] } }),
+        )
         .mockResolvedValueOnce(userDevicesResponse())
-        .mockResolvedValueOnce(jsonResponse({ eol_message: { text: "done" } })),
+        .mockResolvedValueOnce(
+          jsonResponse({
+            eol_message: { cradlewise_notifications: { text: "done" } },
+          }),
+        ),
     });
 
     for (let attempt = 0; attempt < 3; attempt += 1) {

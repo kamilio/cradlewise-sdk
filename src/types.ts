@@ -117,12 +117,27 @@ export interface InboxMessage extends JsonObject {
   content_type?: string | null;
 }
 
+export interface InboxBooleanGroups extends JsonObject {
+  baby_notifications?: boolean | null;
+  cradlewise_notifications?: boolean | null;
+}
+
+export interface InboxTagGroups extends JsonObject {
+  baby_notifications?: string[] | null;
+  cradlewise_notifications?: string[] | null;
+}
+
+export interface InboxTextGroups extends JsonObject {
+  baby_notifications?: string | null;
+  cradlewise_notifications?: string | null;
+}
+
 export interface InboxMessagesResponse extends JsonObject {
   baby_notifications?: InboxMessage[] | null;
   cradlewise_notifications?: InboxMessage[] | null;
-  enable_red_dot?: boolean | null;
-  all_tags?: string[] | null;
-  eol_message?: string | null;
+  enable_red_dot?: InboxBooleanGroups | null;
+  all_tags?: InboxTagGroups | null;
+  eol_message?: InboxTextGroups | null;
 }
 
 export interface CradlePhoto {
