@@ -64,6 +64,11 @@ describe("package metadata", () => {
       "*.XAPK",
       "*.dex",
       "*.DEX",
+      "*.[Aa][Pp][Kk]",
+      "*.[Aa][Aa][Bb]",
+      "*.[Aa][Pp][Kk][Ss]",
+      "*.[Xx][Aa][Pp][Kk]",
+      "*.[Dd][Ee][Xx]",
       "jadx-output/",
       "[Jj][Aa][Dd][Xx]-[Oo][Uu][Tt][Pp][Uu][Tt]/",
     ]) {
@@ -80,6 +85,11 @@ describe("package metadata", () => {
       "*.XAPK",
       "*.dex",
       "*.DEX",
+      "*.[Aa][Pp][Kk]",
+      "*.[Aa][Aa][Bb]",
+      "*.[Aa][Pp][Kk][Ss]",
+      "*.[Xx][Aa][Pp][Kk]",
+      "*.[Dd][Ee][Xx]",
       "jadx-output",
       "[Jj][Aa][Dd][Xx]-[Oo][Uu][Tt][Pp][Uu][Tt]",
     ]) {
