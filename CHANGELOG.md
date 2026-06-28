@@ -44,6 +44,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Give Homey photo Flows a fixed actionable message when the account has no existing official-app device registration, without exposing upstream response details.
 - Treat null or omitted `userDevices` lists as an empty registration set so accounts without a mobile registration reach the actionable Homey photo guidance instead of a generic response error.
 - Accept Android's recognized empty inbox envelope fields when both notification arrays are omitted, while continuing to reject unrelated successful response objects.
+- Validate Android's nested `enable_red_dot`, `all_tags`, and `eol_message` group objects and expose their exact boolean, string-list, and string member types.
+- Expose and validate the complete Android inbox message schema, including notification IDs, priorities, aspect ratios, external actions, read/starred flags, and status.
+- Reject arbitrary successful `userDevices` objects that contain neither a device list nor a recognized count field instead of misclassifying them as an empty registration.
+- Contain hostile Homey photo response, header, body, and reader descriptors behind fixed cause-free errors so platform diagnostics cannot leak signed media details.
 - Align Homey pairing's discovery cap with the SDK's validated 100-crib limit instead of rejecting otherwise valid accounts at 65 cribs.
 - Align Homey's crib-identifier bound with the SDK's 256-byte model and request limit so corrupt legacy device data fails before cloud access.
 - Normalize trailing-dot photo hostnames before local-host checks so DNS-equivalent `localhost.` and `.local.` targets cannot bypass Homey's media SSRF boundary.
