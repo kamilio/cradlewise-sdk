@@ -124,6 +124,64 @@ Known `content_type` values are `image`, `video`, `audio`, and `normal`. For a H
 - Homey downloads that image without Cradlewise authorization headers, refuses redirects, IP literals, single-label hosts, and special-use local DNS names, accepts JPEG/PNG/WebP only after matching the byte signature, and enforces Homey's 5 MB image limit.
 - Photo lookup uses account discovery and the inbox service, so it does not require the crib's live status endpoints to be available.
 
+## Live-view screenshot behavior
+
+The camera button shown over Android's live crib video is separate from the inbox/video-moment feature. The current app does not call a REST snapshot endpoint when that button is pressed.
+
+The traced path is:
+
+1. `HomeActivityNew.handleCameraIvClick()` calls `getBitmapFromVideoView()`.
+2. `HomeActivityNew.captureFrame()` adds a one-shot frame listener to the active WebRTC `SurfaceViewRenderer` at full scale.
+3. The resulting Android `Bitmap` is passed to `VideoViewModel.setVideoBitmap()`.
+4. `VideoViewModel.storeScreenShot()` calls `FileUtils.saveScreenshotToGallery()`.
+5. `FileUtils` compresses the bitmap as PNG and inserts it through Android `MediaStore`. On Android 10 and newer the destination is `DCIM/Cradlewise`; older Android versions use the app's external-storage directory.
+
+The saved URI is used only to open the image in the Android gallery. No upload, inbox update, snapshot API request, or crib command follows this path. Therefore the official Android screenshot is produced on the phone from the already-playing WebRTC frame, even though the underlying video originates at the crib.
+
+This is distinct from cloud-generated inbox/video moments. Those records contain temporary still or thumbnail URLs and remain the source used by `CradlewiseClient.getLatestCribPhoto()` and Homey's `Get the latest crib photo` action.
+
+## Remote live-video room
+
+The current Android app obtains remote live-video credentials with:
+
+- `GET /cradles/{cradleId}/videoRoom?deviceId={registeredDeviceId}`
+
+The response includes a Janus load-balancer WebSocket endpoint, opaque ID, room ID, PIN, short wait limits, and a video-room HMAC secret. These values are session credentials and must never be logged, persisted, committed, or exposed through a Homey Flow token.
+
+Android opens the endpoint with WebSocket subprotocol `janus-protocol` and signs these headers in this order:
+
+- `X-Origin`
+- `X-CId`
+- `X-DId`
+- `X-Timestamp`
+- `X-SId`
+
+`X-Signed-Keys` contains that comma-separated list. The canonical input is each lower-case header name, a colon, and its value, joined with newlines. Android hashes the canonical input with SHA-256, then computes a lower-case HMAC-SHA256 hex digest of that hash using the video-room secret and prefixes it with `HMAC `.
+
+The observed Janus sequence is:
+
+1. Create a Janus session.
+2. Attach `janus.plugin.videoroom` as an application publisher so Janus returns the existing publisher list.
+3. Select the crib publisher whose ID ends in `_cradle` or whose display name ends in `_remote`.
+4. Attach a second VideoRoom handle and join it as a subscriber with the room PIN, private ID, and crib feed ID.
+5. Accept the Janus SDP offer, return an SDP answer with a `start` request, and exchange trickle ICE candidates in both directions.
+6. Keep the Janus session alive while media is being received.
+
+On **2026-07-05**, a private, read-only proof reproduced this sequence against the signed-in account. It joined the room, received the crib's H.264/Opus WebRTC stream, reassembled an H.264 IDR frame from 16 RTP packets, and decoded a fresh `1280 × 720` JPEG. The temporary encoded frame and JPEG were mode-restricted and deleted immediately. No account identifiers, room values, media, or expiring credentials were retained.
+
+Homey can perform the HTTPS, HMAC, WebSocket, Janus, ICE, and RTP portions in JavaScript. A fresh Homey image still requires an H.264 decoder and JPEG/PNG encoder, however. The official Android app relies on Android/WebRTC's native decoder and renderer; Homey does not expose that renderer, WebCodecs, or FFmpeg to apps. Shipping a live-snapshot action therefore requires a reviewed Homey-compatible native or WebAssembly decoder, bounded CPU/memory use, dependency and license review, and tests on the Homey Pro runtime. The repository intentionally does not pretend that the saved-inbox action captures a fresh live frame.
+
+## Other Android feature evidence
+
+The current bundle also contains UI and transport evidence for these feature families. This is an inventory for future bounded research, not proof that every control is safe or stable enough to expose:
+
+- Live video, audio-only monitoring, video-only monitoring, picture-in-picture, persistent/background monitoring, camera flip, and breath-rate monitoring.
+- Auto/manual soothing, bounce on/off, bounce intensity, bounce timers, smart-lock behavior, sound playback, sound volume, lullaby assets, and night-light brightness.
+- Baby presence, sleep/wake phase, attention state, breath-monitor state, crib mode, charging/power state, obstruction/top-arc alerts, and firmware/calibration state.
+- Sleep timeline, saved inbox/video moments, caregiver and baby profiles, product education, firmware update, calibration, and wrong-status feedback flows.
+
+This repository continues to expose verified read-only telemetry and saved media only. Android write models and MQTT topics are not sufficient by themselves to justify sending crib-control, calibration, firmware, or safety-related commands from Homey.
+
 ## Pairing implication
 
 Account authentication and crib discovery are separate from live crib telemetry. The Android evidence and existing API behavior support listing a discovered crib even when its state, online-status, and firmware endpoints are unavailable. Homey pairing and repair therefore validate authenticated discovery only; normal polling is responsible for showing the crib as unavailable or offline afterward.
