@@ -148,7 +148,7 @@ await realtime.connect();
 await realtime.disconnect();
 ```
 
-The current Android app provisions a per-device private key and certificate through a device-registration flow, then connects with mutual TLS. That registration mutates account/device state and can consume a device slot, so this read-only package intentionally does not automate it. The included IAM WebSocket transport is retained only for verified legacy accounts and protocol research; it is disabled unless `allowLegacyIamAuthentication: true` is explicitly supplied. It is not expected to connect to the current service. Use REST polling for supported operation. Initial SDK loading, credential acquisition, connection, and subscription setup share one 30-second hard deadline by default; later MQTT operations receive the same per-operation bound. Set `operationTimeoutMs` only for a verified legacy environment. Timed-out connections and subscriptions are cleaned up if the SDK settles late. At most 100 crib IDs may be subscribed, credential validity is checked before SDK construction, and malformed, oversized, excessively nested, or non-JSON-safe payloads are contained and reported through `messageError`. Exceptions from state callbacks or `state` listeners are contained the same way. See `docs/realtime-and-toolcraft.md`.
+The current Android app provisions a per-device private key and certificate, then connects to the crib's AWS IoT shadow with mutual TLS. `CradlewiseController` implements that verified protocol for explicit control operations. The included IAM WebSocket transport remains available only for legacy protocol research and is disabled unless `allowLegacyIamAuthentication: true` is supplied. REST polling remains the supported telemetry path. See `docs/realtime-and-toolcraft.md` and `docs/android-bundle-notes.md`.
 
 `isRealtimeAvailable()` therefore returns `false` for the current supported protocol. `isLegacyRealtimeSdkAvailable()` only reports whether the optional legacy AWS IoT SDK is installed.
 
@@ -168,6 +168,13 @@ npx cradlewise list
 npx cradlewise status
 npx cradlewise status --cradle-id CRIB_ID --output json
 npx cradlewise analytics --cradle-id CRIB_ID --start-date 2026-06-01T00:00:00Z --end-date 2026-06-08T00:00:00Z --output json
+npx cradlewise sleep-insights --cradle-id CRIB_ID --output json
+npx cradlewise control-status --cradle-id CRIB_ID --output json
+npx cradlewise start --cradle-id CRIB_ID --bounce-level 25 --sound-level 15
+npx cradlewise start --cradle-id CRIB_ID --bounce-level 25 --sound-level 15 --lock-minutes 30
+npx cradlewise stop --cradle-id CRIB_ID
+npx cradlewise lock --cradle-id CRIB_ID --minutes 30
+npx cradlewise unlock --cradle-id CRIB_ID
 npx cradlewise refresh-config
 ```
 
@@ -206,11 +213,11 @@ All package errors extend `CradlewiseError`:
 - The generated cache contains app configuration, not your account password or session credentials.
 - Cache reads reject symlinks, hard links, special files, oversized files, files owned by another user, and control-bearing paths before parsing embedded app secrets. Handle reads remain hard-capped even if a same-user process grows the file after metadata validation, and malformed UTF-8, malformed JSON, or non-object JSON is treated as a cache miss and replaced on the next successful refresh. Concurrent configuration loads for one cache path share a single extraction and atomic write, and temporary cache removal failures are surfaced rather than discarded.
 - Child and sleep data is sensitive. Avoid logging raw API responses in shared systems.
-- Supported high-level, CLI, and MCP surfaces do not implement state-changing crib controls. The generic client requires an explicit unsafe-method opt-in for independent protocol research.
+- State-changing crib controls use the dedicated `CradlewiseController` and are exposed to the CLI and SDK, not MCP. Always stop the crib and unlock controls after testing.
 
 ## Homey app
 
-`packages/homey-app` contains an unofficial Homey SDK v3 app built on the packed SDK. It exposes read-only crib sensors, connectivity, battery and power status, Homey Insights history, Flow conditions and automatic capability triggers, manual refresh, a saved-photo Advanced Flow image token, credential repair, and bounded polling on Homey Pro.
+`packages/homey-app` contains an unofficial Homey SDK v3 app built on the packed SDK. It exposes crib sensors, bounce and sound sliders, on/off soothing, control locking, sleep insights, Flow actions with chosen bounce/sound levels and optional locking, automatic capability triggers, manual refresh, a saved-photo Advanced Flow image token, credential repair, and bounded polling on Homey Pro.
 
 The integration is not a safety-critical baby monitor and must not replace the official Cradlewise app.
 

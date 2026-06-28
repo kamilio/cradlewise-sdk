@@ -1,6 +1,7 @@
 import { defineCommand, defineGroup, S, UserError } from "toolcraft";
 import { CradlewiseAuth } from "./auth.js";
 import { CradlewiseClient, formatApiDate } from "./client.js";
+import { CradlewiseController } from "./controls.js";
 import { getAppConfig, refreshAppConfig } from "./config.js";
 import type { Cradle } from "./models.js";
 import type { CradleData } from "./models.js";
@@ -51,6 +52,17 @@ const analyticsResult = S.Object({
   unavailableSources: S.Array(S.Enum(["events", "analytics"] as const)),
 });
 
+const controlStateResult = S.Object({
+  active: S.Boolean(),
+  bounceOn: S.Boolean(),
+  bounceLevel: S.Number({ jsonType: "integer", minimum: 0, maximum: 99 }),
+  soundOn: S.Boolean(),
+  soundLevel: S.Number({ jsonType: "integer", minimum: 0, maximum: 99 }),
+  locked: S.Boolean(),
+  lockMinutes: S.Number({ jsonType: "integer", minimum: 1, maximum: 60 }),
+  shadowVersion: S.Optional(S.Number({ jsonType: "integer", minimum: 0 })),
+});
+
 const list = defineCommand({
   name: "list",
   description: "List cribs paired with the Cradlewise account",
@@ -92,6 +104,7 @@ const status = defineCommand({
 
 const analytics = defineCommand({
   name: "analytics",
+  aliases: ["sleep-insights"],
   description: "Fetch aggregated sleep analytics for a crib",
   params: S.Object({
     cradleId: S.String({
@@ -150,6 +163,136 @@ const analytics = defineCommand({
   },
 });
 
+const controlStatus = defineCommand({
+  name: "control-status",
+  description: "Read the crib's current bounce, audio, and Smart-lock controls",
+  params: S.Object({
+    cradleId: S.String({ minLength: 1, maxLength: 256 }),
+  }),
+  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  secrets,
+  scope: ["cli", "sdk"],
+  handler: async ({ params, secrets: credentials }) =>
+    withController(
+      credentials,
+      params.cradleId,
+      async (controller, cradle) => ({
+        cradleId: cradle.cradleId,
+        state: await controller.getState(),
+      }),
+    ),
+});
+
+const startSoothing = defineCommand({
+  name: "start",
+  description:
+    "Start the crib at exact bounce and audio levels, optionally locking Smart mode",
+  params: S.Object({
+    cradleId: S.String({ minLength: 1, maxLength: 256 }),
+    bounceLevel: S.Number({
+      description: "Bounce amplitude from 0 through 99",
+      jsonType: "integer",
+      minimum: 0,
+      maximum: 99,
+    }),
+    soundLevel: S.Number({
+      description: "Audio volume from 0 through 99",
+      jsonType: "integer",
+      minimum: 0,
+      maximum: 99,
+    }),
+    lockMinutes: S.Optional(
+      S.Number({
+        description:
+          "Lock Smart mode for 1 through 60 minutes; omit to stay unlocked",
+        jsonType: "integer",
+        minimum: 1,
+        maximum: 60,
+      }),
+    ),
+  }),
+  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  secrets,
+  scope: ["cli", "sdk"],
+  handler: async ({ params, secrets: credentials }) =>
+    withController(
+      credentials,
+      params.cradleId,
+      async (controller, cradle) => ({
+        cradleId: cradle.cradleId,
+        state: await controller.startSoothing({
+          bounceLevel: params.bounceLevel,
+          soundLevel: params.soundLevel,
+          ...(params.lockMinutes === undefined
+            ? {}
+            : { lockMinutes: params.lockMinutes }),
+        }),
+      }),
+    ),
+});
+
+const stopSoothing = defineCommand({
+  name: "stop",
+  description: "Stop both crib bounce and audio",
+  params: S.Object({ cradleId: S.String({ minLength: 1, maxLength: 256 }) }),
+  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  secrets,
+  scope: ["cli", "sdk"],
+  handler: async ({ params, secrets: credentials }) =>
+    withController(
+      credentials,
+      params.cradleId,
+      async (controller, cradle) => ({
+        cradleId: cradle.cradleId,
+        state: await controller.stop(),
+      }),
+    ),
+});
+
+const lockControls = defineCommand({
+  name: "lock",
+  description: "Lock Smart mode at the current settings",
+  params: S.Object({
+    cradleId: S.String({ minLength: 1, maxLength: 256 }),
+    minutes: S.Number({
+      jsonType: "integer",
+      minimum: 1,
+      maximum: 60,
+      default: 30,
+    }),
+  }),
+  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  secrets,
+  scope: ["cli", "sdk"],
+  handler: async ({ params, secrets: credentials }) =>
+    withController(
+      credentials,
+      params.cradleId,
+      async (controller, cradle) => ({
+        cradleId: cradle.cradleId,
+        state: await controller.lock(params.minutes),
+      }),
+    ),
+});
+
+const unlockControls = defineCommand({
+  name: "unlock",
+  description: "Unlock Smart mode",
+  params: S.Object({ cradleId: S.String({ minLength: 1, maxLength: 256 }) }),
+  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  secrets,
+  scope: ["cli", "sdk"],
+  handler: async ({ params, secrets: credentials }) =>
+    withController(
+      credentials,
+      params.cradleId,
+      async (controller, cradle) => ({
+        cradleId: cradle.cradleId,
+        state: await controller.unlock(),
+      }),
+    ),
+});
+
 const refreshConfig = defineCommand({
   name: "refresh-config",
   description:
@@ -177,8 +320,18 @@ const refreshConfig = defineCommand({
 
 export const cradlewiseToolcraftRoot = defineGroup({
   name: "cradlewise",
-  description: "Read-only Cradlewise smart crib tools",
-  children: [list, status, analytics, refreshConfig],
+  description: "Cradlewise smart crib status, sleep insights, and controls",
+  children: [
+    list,
+    status,
+    analytics,
+    controlStatus,
+    startSoothing,
+    stopSoothing,
+    lockControls,
+    unlockControls,
+    refreshConfig,
+  ],
 });
 
 async function createClient(
@@ -209,6 +362,24 @@ async function createClient(
   const appConfig = await getAppConfig();
   const auth = new CradlewiseAuth({ email, password, appConfig });
   return new CradlewiseClient(auth);
+}
+
+async function withController<T>(
+  credentials: { email: string; password: string },
+  requestedCradleId: unknown,
+  operation: (controller: CradlewiseController, cradle: Cradle) => Promise<T>,
+): Promise<T> {
+  const cradleId = requireCradleId(requestedCradleId);
+  const client = await createClient(credentials.email, credentials.password);
+  const cradles = await client.discoverCradles();
+  const cradle = selectCradles(cradles, cradleId)[0];
+  if (!cradle) throw new UserError(`Crib ${cradleId} was not discovered`);
+  const controller = new CradlewiseController(client.auth, cradle);
+  try {
+    return boundedResult(await operation(controller, cradle));
+  } finally {
+    await controller.disconnect();
+  }
 }
 
 function selectCradles(

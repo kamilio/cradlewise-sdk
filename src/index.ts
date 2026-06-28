@@ -5,6 +5,12 @@ export {
 } from "./analytics.js";
 export { CradlewiseAuth } from "./auth.js";
 export { CradlewiseClient, formatApiDate } from "./client.js";
+export { CradlewiseController } from "./controls.js";
+export type {
+  CradleControlState,
+  CradlewiseControllerOptions,
+  StartSoothingOptions,
+} from "./controls.js";
 export {
   AppConfig,
   getAppConfig,

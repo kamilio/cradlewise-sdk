@@ -204,3 +204,15 @@ When a newer Android bundle is inspected, update this document in the same chang
 4. Recompute the trusted application-configuration fingerprints if Cognito, API, or IoT values changed; do not accept a new value solely because its hostname shape looks plausible.
 5. Rerun the SDK and Homey tests, regenerate the vendored SDK archive, prepare a reproducible Homey stage, and install only that verified stage.
 6. Delete all downloaded bundles, extracted APKs, DEX files, decompiler output, and expiring media URLs after the non-secret findings are recorded.
+
+## Verified crib control protocol (Android 2.57.8)
+
+The Android 2.57.8 bundle (version code 211) confirms that current crib controls use an AWS IoT device shadow over mutual TLS. The app obtains a per-registration certificate and private key from `POST /cradles/pairedUsers/v3`, downloads the two configured S3 objects with the account's temporary AWS credentials, and publishes desired state to `$aws/things/{cradle_id}/shadow/update`.
+
+The reviewed, user-facing control fields are:
+
+- bounce power and level: `actuator.on` plus `actuator.amplitude` from 0 through 99;
+- sound power and level: `soundSynth.play` plus `soundSynth.volume` from 0 through 99, preserving the remaining reported `soundSynth` fields;
+- control lock: `autoModeLockOn` and `autoModeLockDuration` from 1 through 60 minutes.
+
+The similarly named top-level `bounceLevel` and `musicLevel` fields are internal five-step recipe indices and are not used for Homey sliders. A live crib test on July 6, 2026 confirmed start at bounce 5 and sound 5 with a five-minute lock, stop while retaining the lock, and explicit unlock. The crib was left stopped and unlocked. Calibration, obstruction handling, firmware operations, and other service controls remain outside the supported surface.

@@ -12,6 +12,7 @@ const OUTPUT_PATH = resolve(
 const ENTRY = `
 export { CradlewiseAuth } from "./dist/auth.js";
 export { CradlewiseClient } from "./dist/client.js";
+export { CradlewiseController } from "./dist/controls.js";
 export {
   AppConfig,
   getAppConfig,

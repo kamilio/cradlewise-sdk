@@ -32,11 +32,21 @@ describe("Toolcraft commands", () => {
       "list",
       "status",
       "analytics",
+      "controlStatus",
+      "start",
+      "stop",
+      "lock",
+      "unlock",
       "refreshConfig",
     ]);
     expect(typeof sdk.list).toBe("function");
     expect(typeof sdk.status).toBe("function");
     expect(typeof sdk.analytics).toBe("function");
+    expect(typeof sdk.controlStatus).toBe("function");
+    expect(typeof sdk.start).toBe("function");
+    expect(typeof sdk.stop).toBe("function");
+    expect(typeof sdk.lock).toBe("function");
+    expect(typeof sdk.unlock).toBe("function");
     expect(typeof sdk.refreshConfig).toBe("function");
   });
 
