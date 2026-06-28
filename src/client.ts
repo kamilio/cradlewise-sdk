@@ -1859,6 +1859,7 @@ function isInboxMessagesResponse(
 
 function isUserDevicesResponse(value: unknown): value is UserDevicesResponse {
   if (!isPlainObject(value)) return false;
+  if (!hasOwnAny(value, ["user_devices", "no_of_devices"])) return false;
   const usersValue = value.user_devices;
   if (
     usersValue !== undefined &&

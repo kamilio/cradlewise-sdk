@@ -2853,9 +2853,13 @@ describe("CradlewiseClient", () => {
         .mockResolvedValueOnce(
           jsonResponse({ no_of_devices: 101, user_devices: [] }),
         )
+        .mockResolvedValueOnce(jsonResponse({ message: "unavailable" }))
         .mockResolvedValueOnce(userDevicesResponse([], "parent@example.com")),
     });
 
+    await expect(client.getUserDeviceIds("baby")).rejects.toThrow(
+      "unexpected response",
+    );
     await expect(client.getUserDeviceIds("baby")).rejects.toThrow(
       "unexpected response",
     );
