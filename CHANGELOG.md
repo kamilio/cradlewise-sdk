@@ -51,6 +51,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Reject non-string Homey photo `content-length` values without invoking attacker-controlled coercion or exposing its failure text.
 - Bound Homey photo MIME and length headers before parsing, and parse byte lengths without mutable regular-expression or string-iterator behavior.
 - Require exact boolean completion flags and stable byte snapshots from Homey photo stream chunks before accepting media data.
+- Contain Homey image creation, stream registration, and update failures behind fixed cause-free Flow errors while preserving partial-image cleanup and retry state.
 - Enforce the Homey photo deadline across both response acquisition and streamed body reads even when fetch, read, or cancellation ignores abort; keep cleanup non-blocking, and use the Node URL constructor so replacement of the writable global cannot weaken local-network rejection.
 - Fail CI and release gates when SDK vendoring rewrites the committed Homey lockfile or archive, preventing stale vendored runtime bytes from passing after an automatic refresh.
 - Exercise the Android-derived nested inbox metadata declarations under both exact optional-property modes.
