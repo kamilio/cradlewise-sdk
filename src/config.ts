@@ -46,11 +46,6 @@ const MAX_IOT_ENDPOINT_CANDIDATES = 1024;
 const MAX_RESPONSE_CHUNKS = 8192;
 const MAX_ARCHIVE_ENTRIES = 50_000;
 const MAX_CONFIG_STRING_BYTES = 8192;
-const DEFAULT_CACHE_PATH = join(
-  homedir(),
-  ".cradlewise",
-  "cradlewise_app_config.json",
-);
 const APKPURE_HEADERS = {
   "user-agent": "APKPure/3.19.85 (Dalvik/2.1.0)",
   "x-abis": "arm64-v8a",
@@ -180,7 +175,9 @@ export async function getAppConfig(
   }
   const fetchImplementation = options.fetch;
   const forceRefresh = options.forceRefresh;
-  const requestedCachePath = options.cachePath ?? DEFAULT_CACHE_PATH;
+  const configuredCachePath = options.cachePath;
+  const usesDefaultCachePath = configuredCachePath === undefined;
+  const requestedCachePath = configuredCachePath ?? defaultCachePath();
   if (
     fetchImplementation !== undefined &&
     typeof fetchImplementation !== "function"
@@ -217,7 +214,7 @@ export async function getAppConfig(
     const pending = extractAppConfig(
       fetchImplementation ?? globalThis.fetch,
     ).then(async (config) => {
-      await writeCachedConfig(cachePath, config);
+      await writeCachedConfig(cachePath, config, usesDefaultCachePath);
       return config;
     });
     const tracked = pending.finally(() => {
@@ -369,6 +366,7 @@ function isSafeCacheFile(
 async function writeCachedConfig(
   cachePath: string,
   config: AppConfig,
+  usesDefaultCachePath: boolean,
 ): Promise<void> {
   const temporaryPath = `${cachePath}.${randomUUID()}.tmp`;
   try {
@@ -376,10 +374,7 @@ async function writeCachedConfig(
       async () => {
         const cacheDirectory = dirname(cachePath);
         await mkdir(cacheDirectory, { recursive: true, mode: 0o700 });
-        await secureCacheDirectory(
-          cacheDirectory,
-          cachePath === resolve(DEFAULT_CACHE_PATH),
-        );
+        await secureCacheDirectory(cacheDirectory, usesDefaultCachePath);
         const data: CachedConfig = {
           cacheVersion: CACHE_VERSION,
           ...snapshotAppConfigData(config),
@@ -400,6 +395,10 @@ async function writeCachedConfig(
       },
     );
   }
+}
+
+function defaultCachePath(): string {
+  return join(homedir(), ".cradlewise", "cradlewise_app_config.json");
 }
 
 async function secureCacheDirectory(

@@ -11,6 +11,7 @@ export default tseslint.config(
     files: ["scripts/*.mjs"],
     languageOptions: {
       globals: {
+        Buffer: "readonly",
         clearTimeout: "readonly",
         console: "readonly",
         process: "readonly",
@@ -35,7 +36,7 @@ export default tseslint.config(
       parserOptions: {
         projectService: {
           allowDefaultProject: ["eslint.config.js", "scripts/*.mjs"],
-          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 10,
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 11,
         },
         tsconfigRootDir: import.meta.dirname,
       },

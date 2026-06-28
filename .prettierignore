@@ -3,5 +3,6 @@ coverage
 node_modules
 packages/homey-app/.homeybuild
 packages/homey-app/app.json
+packages/homey-app/lib/generated
 package-lock.json
 *.tgz
