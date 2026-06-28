@@ -119,7 +119,7 @@ Account authentication and crib discovery are separate from live crib telemetry.
 - The ordering guarantee for `baby_notifications` is inferred from the mobile screen's use of the first page and should be rechecked after Android app updates.
 - Registered app-device IDs may be rotated or removed. Inbox lookup therefore retries only IDs returned by the current account response and only after the API explicitly reports an invalid device ID.
 - Media URL hostnames and expiry periods are response-dependent. Homey therefore validates each URL at use time and does not persist it.
-- No live account request was needed for this inspection. A credentialed integration test may be run manually, but it must not log response URLs because they may contain temporary signatures.
+- Live account checks were limited to read-only validation of the required `device_id` behavior, registered-device discovery, and inbox acceptance. They did not log account identifiers, payloads, or response URLs, which may contain temporary signatures.
 
 ## Refresh checklist
 
