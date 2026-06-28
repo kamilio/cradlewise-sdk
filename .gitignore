@@ -33,6 +33,7 @@ cradlewise_app_config.json
 *.dex
 *.DEX
 jadx-output/
+[Jj][Aa][Dd][Xx]-[Oo][Uu][Tt][Pp][Uu][Tt]/
 *.pem
 *.key
 *.p12

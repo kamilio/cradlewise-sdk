@@ -65,6 +65,7 @@ describe("package metadata", () => {
       "*.dex",
       "*.DEX",
       "jadx-output/",
+      "[Jj][Aa][Dd][Xx]-[Oo][Uu][Tt][Pp][Uu][Tt]/",
     ]) {
       expect(gitignore.split(/\r?\n/u)).toContain(path);
     }
@@ -80,6 +81,7 @@ describe("package metadata", () => {
       "*.dex",
       "*.DEX",
       "jadx-output",
+      "[Jj][Aa][Dd][Xx]-[Oo][Uu][Tt][Pp][Uu][Tt]",
     ]) {
       expect(homeyignore.split(/\r?\n/u)).toContain(path);
     }
