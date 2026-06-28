@@ -22,6 +22,8 @@ Inspection date: **2026-07-05**
 
 The bundle was obtained through the same APKPure metadata and approved CDN-host flow implemented by `src/config.ts`. Time-limited download URLs are intentionally not recorded. Neither the XAPK nor decompiled sources are committed.
 
+The package/version metadata, XAPK size and hash, base APK entry, and base APK size and hash were independently re-fetched and reverified on **2026-07-05** while checking the inbox model classes. The temporary XAPK, APK, and JADX output were removed after the bounded findings below were recorded.
+
 ## Derived trust fingerprints
 
 The non-secret SHA-256 pins in `src/discovery-trust.ts` were derived from the reviewed bundle configuration:
