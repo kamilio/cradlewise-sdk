@@ -20,7 +20,10 @@ try {
   type CradleData,
   type CradlewiseApiErrorOptions,
   type CradlewiseRealtimeEventMap,
+  type InboxBooleanGroups,
   type InboxMessagesResponse,
+  type InboxTagGroups,
+  type InboxTextGroups,
 } from "cradlewise";
 import { cradlewiseToolcraftRoot } from "cradlewise/toolcraft";
 
@@ -42,6 +45,18 @@ const inbox: Promise<InboxMessagesResponse> = client.getInboxMessages(
   "crib",
   "baby",
 );
+const redDots: InboxBooleanGroups = {
+  baby_notifications: false,
+  cradlewise_notifications: true,
+};
+const tags: InboxTagGroups = {
+  baby_notifications: ["baby"],
+  cradlewise_notifications: [],
+};
+const endMessages: InboxTextGroups = {
+  baby_notifications: null,
+  cradlewise_notifications: "End of notifications",
+};
 const photo: Promise<CradlePhoto | undefined> = client.getLatestCribPhoto(
   "crib",
   "baby",
@@ -60,6 +75,9 @@ void options;
 void event;
 void deviceIds;
 void inbox;
+void redDots;
+void tags;
+void endMessages;
 void photo;
 void isTrustedDiscoveredAppConfig(appConfig);
 void cradlewiseToolcraftRoot;
