@@ -2801,6 +2801,31 @@ describe("CradlewiseClient", () => {
     ).toBe("active-device");
   });
 
+  it("preserves registered-device service order without connection times", async () => {
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi.fn<typeof fetch>().mockResolvedValueOnce(
+        jsonResponse({
+          no_of_devices: -1,
+          user_devices: [
+            {
+              email_id: "parent@example.com",
+              devices: [
+                { device_id: "first-device" },
+                { device_id: "second-device", last_connected_time: null },
+                { device_id: "first-device" },
+              ],
+            },
+          ],
+        }),
+      ),
+    });
+
+    await expect(client.getUserDeviceIds("baby")).resolves.toEqual([
+      "first-device",
+      "second-device",
+    ]);
+  });
+
   it("rejects malformed or unavailable registered-device data", async () => {
     const client = new CradlewiseClient(createAuth() as never, {
       fetch: vi
