@@ -4,4 +4,6 @@ Report vulnerabilities privately through GitHub Security Advisories when the rep
 
 Saved crib photos and temporary signed media URLs are sensitive child data. Do not attach them to public reports; describe the behavior without including the image or URL.
 
+API errors retain `responseBody` for explicit diagnostics, but the property is non-enumerable to reduce accidental disclosure through ordinary error serialization. Treat it as sensitive and inspect it only in controlled local debugging.
+
 Only the latest released minor version receives security fixes before 1.0. This unofficial client must not be used as a safety-critical baby monitor or as a replacement for the official Cradlewise application.

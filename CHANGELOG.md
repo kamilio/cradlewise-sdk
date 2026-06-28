@@ -39,6 +39,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Prefer the most recently connected registered app device for inbox reads while preserving stable service order when connection timestamps are unavailable.
 - Reject implausibly large declared `userDevices` counts before inbox device IDs are accepted, keeping response validation within the same bounded record budget.
 - Replace Homey photo-lookup failures with a fixed Flow error so malformed account responses cannot expose caregiver metadata or signed media URLs.
+- Keep `CradlewiseApiError.responseBody` available for explicit debugging but make it non-enumerable so ordinary error serialization does not include private payloads or signed media URLs.
 - Give Homey photo Flows a fixed actionable message when the account has no existing official-app device registration, without exposing upstream response details.
 - Treat null or omitted `userDevices` lists as an empty registration set so accounts without a mobile registration reach the actionable Homey photo guidance instead of a generic response error.
 - Accept Android's recognized empty inbox envelope fields when both notification arrays are omitted, while continuing to reject unrelated successful response objects.

@@ -39,6 +39,9 @@ describe("CradlewiseApiError", () => {
     });
     expect(Reflect.set(error, "status", 200)).toBe(false);
     expect(error.status).toBe(500);
+    expect(error.responseBody).toEqual({ message: "failed" });
+    expect(Object.keys(error)).not.toContain("responseBody");
+    expect(JSON.stringify(error)).not.toContain("failed");
   });
 
   it("rejects malformed options", () => {

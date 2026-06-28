@@ -63,13 +63,18 @@ export class CradlewiseApiError extends CradlewiseError {
     this.status = status;
     this.requestId = requestId;
     this.responseBody = responseBody;
-    for (const key of ["status", "requestId", "responseBody"] as const) {
+    for (const key of ["status", "requestId"] as const) {
       Object.defineProperty(this, key, {
         configurable: false,
         enumerable: true,
         writable: false,
       });
     }
+    Object.defineProperty(this, "responseBody", {
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    });
   }
 }
 
