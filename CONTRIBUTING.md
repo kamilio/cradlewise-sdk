@@ -1,6 +1,6 @@
 # Contributing
 
-1. Use Node.js 20.12 or newer.
+1. Use Node.js 20.12 or newer for the root SDK, and Node.js 24 for Homey build, staging, and install commands.
 2. Run `npm ci --ignore-scripts`, `npm run release:check`, and `npm run check` before opening a pull request.
 3. Keep live tests read-only. Never add a state-changing endpoint without documented protocol evidence and explicit safety review.
 4. Do not commit credentials, tokens, crib IDs, baby names, or captured private payloads.
