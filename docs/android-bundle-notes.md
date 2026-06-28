@@ -55,6 +55,15 @@ The current mobile app contains `feature/videomoments/api/BackendService.kt` beh
 
 Only the GET route is implemented by this repository. The SDK remains read-only by default, and the update route is documented solely to explain the Android model.
 
+The response declarations were verified in both the feature-local and shared model copies:
+
+- `com.cradlewise.nini.feature.videomoments.api.model.InboxMessageV2Response`
+- `com.cradlewise.nini.feature.videomoments.api.model.MessageData`
+- `com.cradlewise.nini.core.commons.api.model.InboxMessageV2Response`
+- `com.cradlewise.nini.core.commons.api.model.InboxMessagesV2Data`
+
+The three nested envelope wrappers use the corresponding `InboxMessageV2ResponseEnableRedDot`, `InboxMessageV2ResponseAllTags`, and `InboxMessageV2ResponseEolMessage` classes in each package. Recording both copies matters because future app versions may remove one layer or let their schemas diverge.
+
 The GET method accepts these optional query parameters:
 
 - `device_id`
