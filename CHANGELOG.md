@@ -190,7 +190,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - Retain authentication deadlines explicitly instead of composing a temporary `AbortSignal.timeout()` source, preventing ignored-abort Cognito calls from hanging on the minimum supported Node.js 20 runtime.
 
-- Preserved an existing Homey poll timer if creating its replacement fails, and made repair roll stored credentials back when a reconnect cannot be completed.
+- Preserved an existing Homey poll timer if creating its replacement fails, and made repair roll stored credentials back when settings persistence or authenticated account verification cannot be completed.
 - Kept reconnect commits atomic across Homey availability and timer setup failures, and prevented deletion during capability synchronization from installing a replacement poll timer or retaining the candidate client.
 - Kept the Homey connectivity alarm unchanged when the dedicated online-status endpoint is unavailable, instead of interpreting a newly discovered crib's default state as a confirmed offline result.
 - Kept a Homey crib degraded when its primary state endpoint is unavailable even if auxiliary online or firmware endpoints still respond, avoiding a false fully-available status with stale sensor values.
