@@ -1836,7 +1836,15 @@ function isInboxMessagesResponse(
   value: unknown,
 ): value is InboxMessagesResponse {
   if (!isPlainObject(value)) return false;
-  if (!hasOwnAny(value, ["baby_notifications", "cradlewise_notifications"])) {
+  if (
+    !hasOwnAny(value, [
+      "baby_notifications",
+      "cradlewise_notifications",
+      "enable_red_dot",
+      "all_tags",
+      "eol_message",
+    ])
+  ) {
     return false;
   }
   return [value.baby_notifications, value.cradlewise_notifications].every(

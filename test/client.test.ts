@@ -2688,6 +2688,25 @@ describe("CradlewiseClient", () => {
     );
   });
 
+  it("accepts a recognized empty inbox envelope", async () => {
+    const client = new CradlewiseClient(createAuth() as never, {
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(userDevicesResponse())
+        .mockResolvedValueOnce(
+          jsonResponse({
+            enable_red_dot: false,
+            all_tags: [],
+            eol_message: null,
+          }),
+        ),
+    });
+
+    await expect(client.getLatestCribPhoto("crib", "baby")).resolves.toBe(
+      undefined,
+    );
+  });
+
   it("selects the newest timestamped crib photo deterministically", async () => {
     const client = new CradlewiseClient(createAuth() as never, {
       fetch: vi
