@@ -71,6 +71,7 @@ describe("package metadata", () => {
       "*.[Dd][Ee][Xx]",
       "jadx-output/",
       "[Jj][Aa][Dd][Xx]-[Oo][Uu][Tt][Pp][Uu][Tt]/",
+      "[Jj][Aa][Dd][Xx]/",
     ]) {
       expect(gitignore.split(/\r?\n/u)).toContain(path);
     }

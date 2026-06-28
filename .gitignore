@@ -39,6 +39,7 @@ cradlewise_app_config.json
 *.[Dd][Ee][Xx]
 jadx-output/
 [Jj][Aa][Dd][Xx]-[Oo][Uu][Tt][Pp][Uu][Tt]/
+[Jj][Aa][Dd][Xx]/
 *.pem
 *.key
 *.p12
