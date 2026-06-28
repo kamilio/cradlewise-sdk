@@ -72,6 +72,8 @@ jobs:
       - run: npm run release:check
       - run: npm run check
       - run: npm run homey:verify
+      - name: Verify committed Homey vendor is current
+        run: git diff --exit-code -- packages/homey-app/package-lock.json packages/homey-app/vendor
       - run: node packages/homey-app/scripts/prepare-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"
       - run: node packages/homey-app/scripts/verify-prepared-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"
       - run: npm audit --prefix packages/homey-app

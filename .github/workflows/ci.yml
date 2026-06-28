@@ -50,6 +50,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run homey:vendor
+      - name: Verify committed Homey vendor is current
+        run: git diff --exit-code -- packages/homey-app/package-lock.json packages/homey-app/vendor
       - run: npm ci --ignore-scripts --prefix packages/homey-app
       - run: npm run build --prefix packages/homey-app
       - run: npm audit --prefix packages/homey-app
@@ -83,6 +85,8 @@ jobs:
             packages/homey-app/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run homey:verify
+      - name: Verify committed Homey vendor is current
+        run: git diff --exit-code -- packages/homey-app/package-lock.json packages/homey-app/vendor
       - run: node packages/homey-app/scripts/prepare-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"
       - run: node packages/homey-app/scripts/verify-prepared-homey-stage.mjs "$RUNNER_TEMP/cradlewise-homey-stage"
       - run: npm audit --prefix packages/homey-app
