@@ -2670,6 +2670,10 @@ describe("CradlewiseClient", () => {
         .mockResolvedValueOnce(userDevicesResponse())
         .mockResolvedValueOnce(
           jsonResponse({ baby_notifications: [{ content_url: 1 }] }),
+        )
+        .mockResolvedValueOnce(userDevicesResponse())
+        .mockResolvedValueOnce(
+          jsonResponse({ baby_notifications: [{ is_read: "false" }] }),
         ),
     });
 
@@ -2677,6 +2681,9 @@ describe("CradlewiseClient", () => {
       url: "https://private.cradlewise.com/photo.jpg",
       contentType: "image",
     });
+    await expect(client.getInboxMessages("crib", "baby")).rejects.toThrow(
+      "unexpected response",
+    );
     await expect(client.getInboxMessages("crib", "baby")).rejects.toThrow(
       "unexpected response",
     );

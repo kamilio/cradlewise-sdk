@@ -109,12 +109,20 @@ export interface InboxMessage extends JsonObject {
   message_id?: number | null;
   message_time?: string | null;
   message_type?: string | null;
+  notification_id?: number | null;
   title?: string | null;
   body?: string | null;
+  priority?: string | null;
   content_url?: string | null;
   thumbnail_url?: string | null;
   presentation_image_url?: string | null;
   content_type?: string | null;
+  aspect_ratio?: string | null;
+  external_url?: string | null;
+  button_text?: string | null;
+  is_read?: boolean | null;
+  is_starred?: boolean | null;
+  status?: string | null;
 }
 
 export interface InboxBooleanGroups extends JsonObject {

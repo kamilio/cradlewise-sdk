@@ -1971,17 +1971,23 @@ function isInvalidInboxDeviceError(
 
 function isInboxMessage(value: unknown): value is InboxMessage {
   if (!isPlainObject(value)) return false;
-  const numberFields = [value.message_id];
+  const numberFields = [value.message_id, value.notification_id];
   const stringFields = [
     value.message_time,
     value.message_type,
     value.title,
     value.body,
+    value.priority,
     value.content_url,
     value.thumbnail_url,
     value.presentation_image_url,
     value.content_type,
+    value.aspect_ratio,
+    value.external_url,
+    value.button_text,
+    value.status,
   ];
+  const booleanFields = [value.is_read, value.is_starred];
   return (
     numberFields.every(
       (field) =>
@@ -1992,6 +1998,10 @@ function isInboxMessage(value: unknown): value is InboxMessage {
     stringFields.every(
       (field) =>
         field === undefined || field === null || isSafeDisplayString(field),
+    ) &&
+    booleanFields.every(
+      (field) =>
+        field === undefined || field === null || typeof field === "boolean",
     )
   );
 }

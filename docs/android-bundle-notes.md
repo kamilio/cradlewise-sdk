@@ -100,6 +100,8 @@ Each message may include:
 - `is_starred`
 - `status`
 
+The current Android classes model `message_id` and `notification_id` as integers; `is_read` and `is_starred` as nullable booleans; and the remaining listed message metadata as nullable strings. The SDK exposes and validates all of these fields.
+
 Known `content_type` values are `image`, `video`, `audio`, and `normal`. For a Homey-compatible still image, prefer `presentation_image_url`, then `thumbnail_url`, then `content_url` only when `content_type` is `image`.
 
 ## Repository mapping
