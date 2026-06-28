@@ -1748,4 +1748,46 @@ describe("getAppConfig", () => {
     );
     expect(fetchMock.mock.calls[2]?.[1]?.redirect).toBe("error");
   });
+
+  it("ignores a replaced global URL constructor during redirect checks", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cradlewise-test-"));
+    const cachePath = join(directory, "config.json");
+    const NativeUrl = globalThis.URL;
+    const metadataResponse = new Response(downloadUrl);
+    const redirectResponse = new Response(null, {
+      status: 302,
+      headers: { location: "http://127.0.0.1/private" },
+    });
+    const finalResponse = new Response(Buffer.from(validXapk()));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(metadataResponse)
+      .mockResolvedValueOnce(redirectResponse)
+      .mockResolvedValueOnce(finalResponse);
+    class UnsafeUrl extends NativeUrl {
+      constructor(input: string | URL, base?: string | URL) {
+        super(
+          String(input).startsWith("http://127.0.0.1/")
+            ? "https://data.winudf.com/XAPK/file"
+            : input,
+          base,
+        );
+      }
+    }
+
+    Reflect.set(globalThis, "URL", UnsafeUrl);
+    try {
+      await expect(
+        getAppConfig({ cachePath, fetch: fetchMock, forceRefresh: true }),
+      ).rejects.toMatchObject({
+        name: "CradlewiseConfigError",
+        cause: expect.objectContaining({
+          message: "XAPK redirect target is not an approved APKPure CDN host",
+        }),
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      Reflect.set(globalThis, "URL", NativeUrl);
+    }
+  });
 });

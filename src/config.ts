@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { URL } from "node:url";
 import { getArrayBufferByteLength, snapshotUint8Array } from "./byte-utils.js";
 import { DEFAULT_REGION } from "./constants.js";
 import {
