@@ -1309,3 +1309,10 @@ This is the running record of changes, evidence, findings, unresolved issues, an
 - Added CLI/SDK commands for control status, start, stop, lock, unlock, and the `sleep-insights` analytics alias.
 - Added Homey on/off state, interactive bounce and sound sliders, a control-lock toggle, sleep-insight capabilities, and Advanced Flow actions that start chosen levels with or without locking.
 - Verified the protocol against the real crib and left it stopped and unlocked after testing.
+
+## 2026-07-06 — Homey percentage, mTLS, and diagnostics correction
+
+- Corrected Homey percentage capabilities to store 0.00–0.99 while translating to the crib's 0–99 control protocol, preventing values such as 5000% in the device UI.
+- Externalized `mqtt` from the browser-conditioned generated authentication bundle so Homey loads MQTT's Node.js mutual-TLS transport instead of its browser WebSocket transport.
+- Verified the exact generated Homey runtime against the real crib by reading control state and changing bounce intensity, then stopped and unlocked the crib.
+- Added a sanitized app settings diagnostics page with report generation, copy, reset, aggregate control/connection/sleep counters, and a bounded recent-event ring.

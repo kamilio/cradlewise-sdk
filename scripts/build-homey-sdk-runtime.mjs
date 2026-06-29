@@ -26,7 +26,7 @@ export async function buildHomeySdkRuntime({ write = true } = {}) {
     bundle: true,
     charset: "utf8",
     conditions: ["browser", "import", "module", "default"],
-    external: ["node:*"],
+    external: ["node:*", "mqtt"],
     format: "cjs",
     legalComments: "none",
     logLevel: "silent",
