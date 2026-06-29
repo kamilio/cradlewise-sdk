@@ -1,5 +1,5 @@
 {
-  "name": "cradlewise",
+  "name": "@kamilio/cradlewise-sdk",
   "version": "0.1.0",
   "description": "Unofficial TypeScript client for the Cradlewise smart crib API",
   "keywords": [
@@ -11,13 +11,13 @@
     "mcp",
     "toolcraft"
   ],
-  "homepage": "https://github.com/kjopek/cradlewise-js#readme",
+  "homepage": "https://github.com/kamilio/cradlewise-sdk#readme",
   "bugs": {
-    "url": "https://github.com/kjopek/cradlewise-js/issues"
+    "url": "https://github.com/kamilio/cradlewise-sdk/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kjopek/cradlewise-js.git"
+    "url": "git+https://github.com/kamilio/cradlewise-sdk.git"
   },
   "license": "MIT",
   "author": "Kamil Jopek",
@@ -51,8 +51,7 @@
     "node": ">=20.12"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "node scripts/clean.mjs dist && tsc -p tsconfig.build.json && node scripts/finalize-build.mjs",
@@ -60,13 +59,6 @@
     "clean": "node scripts/clean.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "homey:install": "node packages/homey-app/scripts/development-runtime.mjs && npm run build && npm run homey:vendor && npm install --prefix packages/homey-app --ignore-scripts",
-    "homey:prepare": "npm run homey:install",
-    "homey:stage": "npm run homey:verify && node packages/homey-app/scripts/prepare-homey-stage.mjs && npm run homey:stage:verify",
-    "homey:stage:verify": "node packages/homey-app/scripts/verify-prepared-homey-stage.mjs",
-    "homey:runtime": "node scripts/build-homey-sdk-runtime.mjs",
-    "homey:vendor": "node scripts/vendor-homey-sdk.mjs && npm run homey:runtime",
-    "homey:verify": "node packages/homey-app/scripts/development-runtime.mjs && npm run build && npm run homey:vendor && npm install --prefix packages/homey-app --ignore-scripts && npm run verify --prefix packages/homey-app",
     "lint": "eslint . --max-warnings 0",
     "pack:check": "npm pack --dry-run",
     "pack:reproducible": "node scripts/reproducible-pack.mjs",

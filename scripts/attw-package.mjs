@@ -10,7 +10,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { gunzipSync } from "node:zlib";
-import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
+import { reviewedChildEnvironment } from "./child-environment.mjs";
 
 const directory = mkdtempSync(join(tmpdir(), "cradlewise-attw-"));
 const MAX_PACKED_FILES = 1000;

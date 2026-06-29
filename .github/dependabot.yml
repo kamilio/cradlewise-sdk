@@ -11,10 +11,3 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: npm
-    directory: /packages/homey-app
-    schedule:
-      interval: weekly
-    groups:
-      homey-development-dependencies:
-        dependency-type: development

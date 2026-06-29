@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
+import { reviewedChildEnvironment } from "./child-environment.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "cradlewise-types-"));
 const root = process.cwd();
@@ -24,8 +24,8 @@ try {
   type InboxMessagesResponse,
   type InboxTagGroups,
   type InboxTextGroups,
-} from "cradlewise";
-import { cradlewiseToolcraftRoot } from "cradlewise/toolcraft";
+} from "@kamilio/cradlewise-sdk";
+import { cradlewiseToolcraftRoot } from "@kamilio/cradlewise-sdk/toolcraft";
 
 declare const realtime: CradlewiseRealtime;
 declare const client: CradlewiseClient;
@@ -101,8 +101,10 @@ void cradlewiseToolcraftRoot;
             noEmit: true,
             baseUrl: directory,
             paths: {
-              cradlewise: [resolve(root, "dist/index.d.ts")],
-              "cradlewise/toolcraft": [resolve(root, "dist/toolcraft.d.ts")],
+              "@kamilio/cradlewise-sdk": [resolve(root, "dist/index.d.ts")],
+              "@kamilio/cradlewise-sdk/toolcraft": [
+                resolve(root, "dist/toolcraft.d.ts"),
+              ],
               toolcraft: [
                 resolve(root, "node_modules/toolcraft/dist/index.d.ts"),
               ],

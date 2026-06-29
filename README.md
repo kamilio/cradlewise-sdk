@@ -14,7 +14,7 @@ Unofficial, strongly typed Node.js client for the Cradlewise smart crib API. It 
 ## Install
 
 ```sh
-npm install cradlewise
+npm install @kamilio/cradlewise-sdk
 ```
 
 ## Quick start
@@ -158,7 +158,7 @@ Realtime listeners are typed through the exported `CradlewiseRealtimeEventMap`. 
 
 The package uses [Toolcraft](https://github.com/poe-platform/poe-code/tree/main/packages/toolcraft) to define one read-only command tree for CLI, SDK, and MCP surfaces.
 
-Toolcraft is a default-installed optional dependency so core-only environments such as Homey can use `npm install --omit=optional` without shipping the CLI/MCP graph. Normal npm installs include it; the `cradlewise` executable and `cradlewise/toolcraft` export require Toolcraft to be installed. Toolcraft bundles its schema implementation and re-exports the complete public schema type surface, so downstream declarations do not require a separate `toolcraft-schema` dependency. AJV 8 is temporarily declared in the same optional boundary to prevent npm from incorrectly satisfying Toolcraft with ESLint's incompatible AJV 6; this upstream packaging issue is tracked as `poe-platform/poe-code#511`.
+Toolcraft is a default-installed optional dependency so core-only environments such as Homey can use `npm install --omit=optional` without shipping the CLI/MCP graph. Normal npm installs include it; the `cradlewise` executable and `@kamilio/cradlewise-sdk/toolcraft` export require Toolcraft to be installed. Toolcraft bundles its schema implementation and re-exports the complete public schema type surface, so downstream declarations do not require a separate `toolcraft-schema` dependency. AJV 8 is temporarily declared in the same optional boundary to prevent npm from incorrectly satisfying Toolcraft with ESLint's incompatible AJV 6; this upstream packaging issue is tracked as `poe-platform/poe-code#511`.
 
 ```sh
 export CRADLEWISE_LOGIN=parent@example.com
@@ -189,7 +189,7 @@ Or import the command tree:
 
 ```ts
 import { createSDK } from "toolcraft/sdk";
-import { cradlewiseToolcraftRoot } from "cradlewise/toolcraft";
+import { cradlewiseToolcraftRoot } from "@kamilio/cradlewise-sdk/toolcraft";
 
 const sdk = createSDK(cradlewiseToolcraftRoot);
 const result = await sdk.list({});
@@ -223,21 +223,7 @@ All package errors extend `CradlewiseError`:
 
 ## Homey app
 
-`packages/homey-app` contains an unofficial Homey SDK v3 app built on the packed SDK. It exposes crib sensors, native Off/1–5 bounce and sound pickers, separate maximum-percentage controls, on/off soothing, control locking, sleep insights, Flow actions with chosen bounce/sound levels and optional locking, automatic capability triggers, manual refresh, a saved-photo Advanced Flow image token, credential repair, diagnostics, and bounded polling on Homey Pro.
-
-The integration is not a safety-critical baby monitor and must not replace the official Cradlewise app.
-
-Use Node.js 24 for the Homey CLI. CI and release verification pin Node.js 24.14.0 for tooling and Node.js 22.22.0 for the shipped Homey runtime:
-
-```sh
-npm run homey:install
-npm run homey:prepare
-npm run homey:verify
-```
-
-Prefer `homey:prepare`; it aliases the reference-compatible `homey:install` script. Both only build, vendor, and install the local Homey package dependencies. They do not contact or install the app on a Homey Pro. `homey:verify` is likewise local and non-publishing.
-
-See [`packages/homey-app/DEVELOPMENT.md`](packages/homey-app/DEVELOPMENT.md) for the architecture, capability mapping, live smoke test, and publish workflow.
+The separate `kamilio/cradlewise-homey` repository vendors exact tarballs of this SDK for Homey builds.
 
 ## Development
 
@@ -254,11 +240,11 @@ The integration test verifies configuration cache reuse, authentication reuse, a
 
 Coverage gates apply per production file, and production source rejects explicit `any`, unsafe `any` propagation, and non-null assertions at lint time.
 
-`npm run check` also builds the declarations and compiles strict consumers with library checking enabled and `exactOptionalPropertyTypes` both disabled and enabled. This guards both common TypeScript configurations and the `cradlewise/toolcraft` export before packaging.
+`npm run check` also builds the declarations and compiles strict consumers with library checking enabled and `exactOptionalPropertyTypes` both disabled and enabled. This guards both common TypeScript configurations and the `@kamilio/cradlewise-sdk/toolcraft` export before packaging.
 
 Both `prepublishOnly` and the release workflow run `npm run release:check`. The check requires an npm lockfile v3, verifies that installed production package versions match `package-lock.json`, rejects production packages that declare install scripts, validates every independently installed production package, and accepts file-based terms only from bounded, nonempty regular LICENSE/COPYING files. CI and release installation use `npm ci --ignore-scripts`, while final pack/publish commands also disable lifecycle scripts. The bundled-internal exception is restricted to the exact reviewed Toolcraft 0.0.109 tarball integrity; bundle membership, exact versions, and licenses are verified from Toolcraft's versioned composition manifest instead of a local duplicate allowlist. Package inspection uses Node's native dotenv parser and checks both local environment values and cached bootstrap identifiers against source files and the exact tar archive. Toolcraft 0.0.109 and its bundled Toolcraft Schema 0.0.109 declare MIT terms, so the release gate passes.
 
-Before the first release, create the public `kjopek/cradlewise-js` repository and add an environment-scoped `NPM_TOKEN` granular publish token to bootstrap the unclaimed npm package. After `cradlewise` exists on npm, configure the `release.yml` trusted publisher with publish permission and remove the token secret; subsequent releases use short-lived OIDC credentials. The release job pins npm 11.18.0 and disables dependency caching.
+The first public release is published interactively. Subsequent pushes to `main` publish stable patch releases through npm trusted publishing with GitHub OIDC provenance and no long-lived npm token.
 
 ## License
 

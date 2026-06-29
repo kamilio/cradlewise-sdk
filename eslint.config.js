@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "coverage", "node_modules", "packages/homey-app"],
+    ignores: ["dist", "coverage", "node_modules"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -23,8 +23,8 @@ export default tseslint.config(
     files: [
       "scripts/package-smoke.mjs",
       "scripts/attw-package.mjs",
+      "scripts/command-process.mjs",
       "scripts/release-check.mjs",
-      "scripts/vendor-homey-sdk.mjs",
       "scripts/verify-file-sri.mjs",
     ],
     rules: {

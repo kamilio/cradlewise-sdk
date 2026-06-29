@@ -12,13 +12,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { reviewedChildEnvironment } from "../packages/homey-app/scripts/child-environment.mjs";
+import { reviewedChildEnvironment } from "./child-environment.mjs";
+import { forwardCommandSignals, terminateCommand } from "./command-process.mjs";
 import {
-  forwardCommandSignals,
-  terminateCommand,
-} from "../packages/homey-app/scripts/command-process.mjs";
-import {
-  PACKAGE_NAME,
   PACKAGE_VERSION,
   CradlewiseClient,
   isLegacyRealtimeSdkAvailable,
@@ -55,7 +51,7 @@ if (
   )
 )
   throw new Error("IoT endpoint validator export is not loadable");
-if (cradlewiseToolcraftRoot.name !== PACKAGE_NAME)
+if (cradlewiseToolcraftRoot.name !== "cradlewise")
   throw new Error("Toolcraft root name drifted");
 if (await isRealtimeAvailable())
   throw new Error("Unsupported current realtime was reported as available");
@@ -346,7 +342,9 @@ try {
   );
   const tarballName = pack.stdout.trim();
   if (
-    !/^cradlewise-\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\.tgz$/.test(tarballName)
+    !/^kamilio-cradlewise-sdk-\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\.tgz$/.test(
+      tarballName,
+    )
   ) {
     throw new Error("Core-only package smoke received an invalid tarball name");
   }
@@ -380,7 +378,7 @@ try {
     [
       "--input-type=module",
       "--eval",
-      "const sdk = await import('cradlewise'); if (typeof sdk.CradlewiseClient !== 'function' || typeof sdk.getAppConfig !== 'function') throw new Error('core export unavailable');",
+      "const sdk = await import('@kamilio/cradlewise-sdk'); if (typeof sdk.CradlewiseClient !== 'function' || typeof sdk.getAppConfig !== 'function') throw new Error('core export unavailable');",
     ],
     consumer,
   );
