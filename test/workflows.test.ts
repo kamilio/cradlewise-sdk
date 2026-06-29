@@ -8,7 +8,7 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("npm@^11.15.0");
     expect(workflow).toContain("npm version --no-git-tag-version patch");
     expect(workflow).toContain(
-      "npm publish --provenance --access public --tag latest",
+      "npm publish --ignore-scripts --provenance --access public --tag latest",
     );
     expect(workflow).toContain('version.includes("-")');
     expect(workflow).not.toContain("NODE_AUTH_TOKEN");

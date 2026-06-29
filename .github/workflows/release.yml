@@ -36,4 +36,4 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$REMOTE_VERSION"
           npm version --no-git-tag-version patch
           node -e 'if (require("./package.json").version.includes("-")) process.exit(1)'
-      - run: npm publish --provenance --access public --tag latest
+      - run: npm publish --ignore-scripts --provenance --access public --tag latest
