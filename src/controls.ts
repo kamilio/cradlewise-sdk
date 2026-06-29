@@ -93,6 +93,24 @@ interface ShadowDocument {
   clientToken?: string;
 }
 
+interface PendingShadowRequest {
+  acceptedTopic: string;
+  rejectedTopic: string;
+  resolve(value: ShadowDocument): void;
+  reject(error: Error): void;
+  timeout: ReturnType<typeof setTimeout>;
+}
+
+const EMPTY_CONTROL_STATE: CradleControlState = Object.freeze({
+  active: false,
+  bounceOn: false,
+  bounceLevel: 0,
+  soundOn: false,
+  soundLevel: 0,
+  locked: false,
+  lockMinutes: 30,
+});
+
 export class CradlewiseController {
   readonly auth: CradlewiseAuth;
   readonly cradle: Cradle;
@@ -104,6 +122,11 @@ export class CradlewiseController {
   #mqtt: CradlewiseMqttConnection | undefined;
   #connection: Promise<CradlewiseMqttConnection> | undefined;
   #configuration: Promise<DeviceConfiguration> | undefined;
+  #shadowSubscription: Promise<void> | undefined;
+  #shadowSubscriptionConnection: CradlewiseMqttConnection | undefined;
+  readonly #pendingShadowRequests = new Map<string, PendingShadowRequest>();
+  #lastState: CradleControlState = EMPTY_CONTROL_STATE;
+  #updateQueue: Promise<void> = Promise.resolve();
 
   constructor(
     auth: CradlewiseAuth,
@@ -151,11 +174,16 @@ export class CradlewiseController {
     const connection = this.#mqtt;
     this.#mqtt = undefined;
     this.#connection = undefined;
+    this.#resetShadowTransport(
+      new CradlewiseRealtimeError("Crib control connection closed"),
+    );
     if (connection) await connection.endAsync();
   }
 
   async getState(): Promise<CradleControlState> {
-    return controlStateFromShadow(await this.#getShadow());
+    const state = controlStateFromShadow(await this.#getShadow());
+    this.#lastState = state;
+    return state;
   }
 
   async startSoothing(
@@ -166,13 +194,9 @@ export class CradlewiseController {
     const bounceLevel = requireLevel(options.bounceLevel, "bounceLevel");
     const soundLevel = requireLevel(options.soundLevel, "soundLevel");
     const lockMinutes = optionalLockMinutes(options.lockMinutes);
-    const shadow = await this.#getShadow();
-    const reported = shadow.state?.reported ?? {};
-    const soundSynth = snapshotObject(reported.soundSynth);
     const desired: JsonObject = {
       actuator: { on: bounceLevel > 0, amplitude: bounceLevel },
       soundSynth: {
-        ...soundSynth,
         play: soundLevel > 0,
         volume: soundLevel,
       },
@@ -181,26 +205,30 @@ export class CradlewiseController {
         ? {}
         : { autoModeLockDuration: lockMinutes }),
     };
-    return this.#updateAndConfirm(
-      desired,
-      (state) =>
-        state.bounceLevel === bounceLevel &&
-        state.soundLevel === soundLevel &&
-        state.bounceOn === bounceLevel > 0 &&
-        state.soundOn === soundLevel > 0 &&
-        state.locked === (lockMinutes !== undefined),
-    );
+    return this.#updateState(desired, (state) => ({
+      ...state,
+      active: bounceLevel > 0 || soundLevel > 0,
+      bounceOn: bounceLevel > 0,
+      bounceLevel,
+      soundOn: soundLevel > 0,
+      soundLevel,
+      locked: lockMinutes !== undefined,
+      ...(lockMinutes === undefined ? {} : { lockMinutes }),
+    }));
   }
 
   async stop(): Promise<CradleControlState> {
-    const shadow = await this.#getShadow();
-    const soundSynth = snapshotObject(shadow.state?.reported?.soundSynth);
-    return this.#updateAndConfirm(
+    return this.#updateState(
       {
         actuator: { on: false },
-        soundSynth: { ...soundSynth, play: false },
+        soundSynth: { play: false },
       },
-      (state) => !state.bounceOn && !state.soundOn,
+      (state) => ({
+        ...state,
+        active: false,
+        bounceOn: false,
+        soundOn: false,
+      }),
     );
   }
 
@@ -215,8 +243,6 @@ export class CradlewiseController {
     );
     const soundLevel = requireSoothingLevel(options.soundLevel, "soundLevel");
     const lockMinutes = optionalLockMinutes(options.lockMinutes);
-    const shadow = await this.#getShadow();
-    const current = controlStateFromShadow(shadow);
     const desired: JsonObject = {
       ...(bounceLevel > 0
         ? { bounceLevel: bounceLevel - 1 }
@@ -224,25 +250,16 @@ export class CradlewiseController {
       ...(soundLevel > 0
         ? {
             musicLevel: soundLevel - 1,
-            soundSynth: {
-              ...snapshotObject(shadow.state?.reported?.soundSynth),
-              play: true,
-            },
+            soundSynth: { play: true },
           }
-        : {
-            soundSynth: {
-              ...snapshotObject(shadow.state?.reported?.soundSynth),
-              play: false,
-            },
-          }),
+        : { soundSynth: { play: false } }),
       autoModeLockOn: lockMinutes !== undefined,
       ...(lockMinutes === undefined
         ? {}
         : { autoModeLockDuration: lockMinutes }),
     };
-    await this.#shadowRequest("update", { state: { desired } });
-    return {
-      ...current,
+    return this.#updateState(desired, (state) => ({
+      ...state,
       active: bounceLevel > 0 || soundLevel > 0,
       bounceOn: bounceLevel > 0,
       soundOn: soundLevel > 0,
@@ -250,149 +267,111 @@ export class CradlewiseController {
       soundIntensityLevel: soundLevel,
       locked: lockMinutes !== undefined,
       ...(lockMinutes === undefined ? {} : { lockMinutes }),
-    };
+    }));
   }
 
   async setBounceLevel(level: number): Promise<CradleControlState> {
     const bounceLevel = requireLevel(level, "level");
-    const current = await this.getState();
-    await this.#shadowRequest("update", {
-      state: {
-        desired: { actuator: { on: bounceLevel > 0, amplitude: bounceLevel } },
-      },
-    });
-    return {
-      ...current,
-      active: bounceLevel > 0 || current.soundOn,
-      bounceOn: bounceLevel > 0,
-      bounceLevel,
-    };
+    return this.#updateState(
+      { actuator: { on: bounceLevel > 0, amplitude: bounceLevel } },
+      (state) => ({
+        ...state,
+        active: bounceLevel > 0 || state.soundOn,
+        bounceOn: bounceLevel > 0,
+        bounceLevel,
+      }),
+    );
   }
 
   async setSoundLevel(level: number): Promise<CradleControlState> {
     const soundLevel = requireLevel(level, "level");
-    const shadow = await this.#getShadow();
-    const current = controlStateFromShadow(shadow);
-    const soundSynth = snapshotObject(shadow.state?.reported?.soundSynth);
-    await this.#shadowRequest("update", {
-      state: {
-        desired: {
-          soundSynth: {
-            ...soundSynth,
-            play: soundLevel > 0,
-            volume: soundLevel,
-          },
-        },
-      },
-    });
-    return {
-      ...current,
-      active: current.bounceOn || soundLevel > 0,
-      soundOn: soundLevel > 0,
-      soundLevel,
-    };
+    return this.#updateState(
+      { soundSynth: { play: soundLevel > 0, volume: soundLevel } },
+      (state) => ({
+        ...state,
+        active: state.bounceOn || soundLevel > 0,
+        soundOn: soundLevel > 0,
+        soundLevel,
+      }),
+    );
   }
 
   async setBounceIntensityLevel(level: number): Promise<CradleControlState> {
     const bounceLevel = requireSoothingLevel(level, "level");
-    const current = await this.getState();
-    await this.#shadowRequest("update", {
-      state: {
-        desired:
-          bounceLevel > 0
-            ? { bounceLevel: bounceLevel - 1 }
-            : { actuator: { on: false } },
-      },
-    });
-    return {
-      ...current,
-      active: bounceLevel > 0 || current.soundOn,
-      bounceOn: bounceLevel > 0,
-      bounceIntensityLevel: bounceLevel,
-    };
+    return this.#updateState(
+      bounceLevel > 0
+        ? { bounceLevel: bounceLevel - 1 }
+        : { actuator: { on: false } },
+      (state) => ({
+        ...state,
+        active: bounceLevel > 0 || state.soundOn,
+        bounceOn: bounceLevel > 0,
+        bounceIntensityLevel: bounceLevel,
+      }),
+    );
   }
 
   async setSoundIntensityLevel(level: number): Promise<CradleControlState> {
     const soundLevel = requireSoothingLevel(level, "level");
-    const shadow = await this.#getShadow();
-    const current = controlStateFromShadow(shadow);
-    await this.#shadowRequest("update", {
-      state: {
-        desired:
-          soundLevel > 0
-            ? {
-                musicLevel: soundLevel - 1,
-                soundSynth: {
-                  ...snapshotObject(shadow.state?.reported?.soundSynth),
-                  play: true,
-                },
-              }
-            : {
-                soundSynth: {
-                  ...snapshotObject(shadow.state?.reported?.soundSynth),
-                  play: false,
-                },
-              },
-      },
-    });
-    return {
-      ...current,
-      active: current.bounceOn || soundLevel > 0,
-      soundOn: soundLevel > 0,
-      soundIntensityLevel: soundLevel,
-    };
+    return this.#updateState(
+      soundLevel > 0
+        ? { musicLevel: soundLevel - 1, soundSynth: { play: true } }
+        : { soundSynth: { play: false } },
+      (state) => ({
+        ...state,
+        active: state.bounceOn || soundLevel > 0,
+        soundOn: soundLevel > 0,
+        soundIntensityLevel: soundLevel,
+      }),
+    );
   }
 
   async setMaxBouncePercent(percent: number): Promise<CradleControlState> {
     const maxBouncePercent = requirePercent(percent, "percent");
-    const current = await this.getState();
-    await this.#shadowRequest("update", {
-      state: { desired: { maxBounceLimit: maxBouncePercent } },
-    });
-    return { ...current, maxBouncePercent };
+    return this.#updateState({ maxBounceLimit: maxBouncePercent }, (state) => ({
+      ...state,
+      maxBouncePercent,
+    }));
   }
 
   async setMaxSoundPercent(percent: number): Promise<CradleControlState> {
     const maxSoundPercent = requirePercent(percent, "percent");
-    const current = await this.getState();
-    await this.#shadowRequest("update", {
-      state: { desired: { maxVolumeLimit: maxSoundPercent } },
-    });
-    return { ...current, maxSoundPercent };
+    return this.#updateState({ maxVolumeLimit: maxSoundPercent }, (state) => ({
+      ...state,
+      maxSoundPercent,
+    }));
   }
 
   async lock(minutes = 30): Promise<CradleControlState> {
     const lockMinutes = requireLockMinutes(minutes);
-    return this.#updateAndConfirm(
+    return this.#updateState(
       { autoModeLockDuration: lockMinutes, autoModeLockOn: true },
-      (state) => state.locked && state.lockMinutes === lockMinutes,
+      (state) => ({ ...state, locked: true, lockMinutes }),
     );
   }
 
   async unlock(): Promise<CradleControlState> {
-    return this.#updateAndConfirm(
-      { autoModeLockOn: false },
-      (state) => !state.locked,
-    );
+    return this.#updateState({ autoModeLockOn: false }, (state) => ({
+      ...state,
+      locked: false,
+    }));
   }
 
-  async #updateAndConfirm(
+  async #updateState(
     desired: JsonObject,
-    matches: (state: CradleControlState) => boolean,
+    project: (state: CradleControlState) => CradleControlState,
   ): Promise<CradleControlState> {
-    await this.#shadowRequest("update", { state: { desired } });
-    const deadline = Date.now() + this.#operationTimeoutMs;
-    let state = await this.getState();
-    while (!matches(state)) {
-      if (Date.now() >= deadline) {
-        throw new CradlewiseRealtimeError(
-          "The crib did not confirm the requested control change",
-        );
-      }
-      await delay(250);
-      state = await this.getState();
-    }
-    return state;
+    const update = this.#updateQueue.then(async () => {
+      await this.#shadowRequest("update", { state: { desired } });
+      const state = project(this.#lastState);
+      this.#lastState = state;
+      return state;
+    });
+    this.#updateQueue = update.then(
+      () => undefined,
+      () => undefined,
+    );
+    return update;
   }
 
   async #getShadow(): Promise<ShadowDocument> {
@@ -404,60 +383,128 @@ export class CradlewiseController {
     body: JsonObject,
   ): Promise<ShadowDocument> {
     const connection = await this.#getConnection();
+    await this.#ensureShadowSubscription(connection);
     const token = `cradlewise-${randomUUID()}`;
     const base = `$aws/things/${this.cradle.cradleId}/shadow/${operation}`;
     const accepted = `${base}/accepted`;
     const rejected = `${base}/rejected`;
-    await connection.subscribeAsync([accepted, rejected], { qos: 0 });
-    try {
-      const response = new Promise<ShadowDocument>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          cleanup();
-          reject(new CradlewiseRealtimeError("Crib control request timed out"));
-        }, this.#operationTimeoutMs);
-        const onMessage = (topic: string, payload: Buffer): void => {
-          if (topic !== accepted && topic !== rejected) return;
-          let parsed: ShadowDocument;
-          try {
-            parsed = parseShadow(payload);
-          } catch (error) {
-            cleanup();
-            reject(
-              error instanceof Error
-                ? error
-                : new CradlewiseRealtimeError("Invalid crib control response"),
-            );
-            return;
-          }
-          if (parsed.clientToken !== token) return;
-          cleanup();
-          if (topic === rejected) {
-            reject(
-              new CradlewiseRealtimeError(
-                "The crib rejected the control request",
-              ),
-            );
-          } else {
-            resolve(parsed);
-          }
-        };
-        const cleanup = (): void => {
-          clearTimeout(timeout);
-          connection.off("message", onMessage);
-        };
-        connection.on("message", onMessage);
+    const response = new Promise<ShadowDocument>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.#pendingShadowRequests.delete(token);
+        reject(new CradlewiseRealtimeError("Crib control request timed out"));
+      }, this.#operationTimeoutMs);
+      this.#pendingShadowRequests.set(token, {
+        acceptedTopic: accepted,
+        rejectedTopic: rejected,
+        resolve,
+        reject,
+        timeout,
       });
+    });
+    try {
       await connection.publishAsync(
         base,
         JSON.stringify({ ...body, clientToken: token }),
         { qos: 0 },
       );
-      return await response;
-    } finally {
-      await connection
-        .unsubscribeAsync([accepted, rejected])
-        .catch(() => undefined);
+    } catch (error) {
+      const pending = this.#pendingShadowRequests.get(token);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        this.#pendingShadowRequests.delete(token);
+      }
+      throw error;
     }
+    return response;
+  }
+
+  async #ensureShadowSubscription(
+    connection: CradlewiseMqttConnection,
+  ): Promise<void> {
+    if (
+      this.#shadowSubscriptionConnection === connection &&
+      this.#shadowSubscription
+    ) {
+      return this.#shadowSubscription;
+    }
+    if (this.#shadowSubscriptionConnection !== connection) {
+      this.#resetShadowTransport(
+        new CradlewiseRealtimeError("Crib control connection changed"),
+      );
+    }
+    this.#shadowSubscriptionConnection = connection;
+    connection.on("message", this.#shadowMessageListener);
+    const base = `$aws/things/${this.cradle.cradleId}/shadow`;
+    const topics = [
+      `${base}/get/accepted`,
+      `${base}/get/rejected`,
+      `${base}/update/accepted`,
+      `${base}/update/rejected`,
+    ];
+    const subscription = connection
+      .subscribeAsync(topics, { qos: 0 })
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        if (this.#shadowSubscriptionConnection === connection) {
+          this.#resetShadowTransport(
+            new CradlewiseRealtimeError(
+              "Unable to subscribe to crib control responses",
+              { cause: error },
+            ),
+          );
+        }
+        throw error;
+      });
+    this.#shadowSubscription = subscription;
+    return subscription;
+  }
+
+  readonly #shadowMessageListener = (topic: string, payload: Buffer): void => {
+    let parsed: ShadowDocument;
+    try {
+      parsed = parseShadow(payload);
+    } catch (error) {
+      this.#rejectPendingShadowRequests(
+        error instanceof Error
+          ? error
+          : new CradlewiseRealtimeError("Invalid crib control response"),
+      );
+      return;
+    }
+    const token = parsed.clientToken;
+    if (!token) return;
+    const pending = this.#pendingShadowRequests.get(token);
+    if (!pending) return;
+    if (topic !== pending.acceptedTopic && topic !== pending.rejectedTopic) {
+      return;
+    }
+    clearTimeout(pending.timeout);
+    this.#pendingShadowRequests.delete(token);
+    if (topic === pending.rejectedTopic) {
+      pending.reject(
+        new CradlewiseRealtimeError("The crib rejected the control request"),
+      );
+    } else {
+      pending.resolve(parsed);
+    }
+  };
+
+  #rejectPendingShadowRequests(error: Error): void {
+    for (const pending of this.#pendingShadowRequests.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+    }
+    this.#pendingShadowRequests.clear();
+  }
+
+  #resetShadowTransport(error: Error): void {
+    const connection = this.#shadowSubscriptionConnection;
+    if (connection) {
+      connection.off("message", this.#shadowMessageListener);
+    }
+    this.#shadowSubscription = undefined;
+    this.#shadowSubscriptionConnection = undefined;
+    this.#rejectPendingShadowRequests(error);
   }
 
   async #getConnection(): Promise<CradlewiseMqttConnection> {
@@ -510,7 +557,12 @@ export class CradlewiseController {
       );
       this.#mqtt = connection;
       connection.once("close", () => {
-        if (this.#mqtt === connection) this.#mqtt = undefined;
+        if (this.#mqtt === connection) {
+          this.#mqtt = undefined;
+          this.#resetShadowTransport(
+            new CradlewiseRealtimeError("Crib control connection closed"),
+          );
+        }
       });
       return connection;
     } catch (error) {
@@ -824,8 +876,4 @@ function isTwoNonemptyStrings(value: unknown): value is [string, string] {
     typeof value[1] === "string" &&
     value[1].length > 0
   );
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

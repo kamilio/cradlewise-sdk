@@ -1324,3 +1324,12 @@ This is the running record of changes, evidence, findings, unresolved issues, an
 - Preserved the SDK's low-level 0–99 amplitude and volume operations while adding native-level controller methods for Homey and Flows.
 - Removed confirmation polling from rapid level and maximum updates. Homey now publishes one accepted shadow update and projects the requested state immediately, avoiding repeated-control timeouts.
 - Defined Homey's On behavior: reuse the saved Off/1–5 selections, start only selected channels, and use level 1 for both only when both saved selections are Off.
+
+## 2026-07-06 — Fast, timeout-resistant crib controls
+
+- Removed the remaining post-update confirmation polling from start, stop, lock, and unlock. Every control now completes after one accepted AWS IoT shadow update and projects the requested state locally.
+- Replaced per-request MQTT subscribe/unsubscribe cycles with one persistent four-topic response subscription per controller connection. Correlated requests can now overlap safely without one request unsubscribing another.
+- Added immediate rejection of all pending control requests when the MQTT connection closes, avoiding waits until the full operation timeout after a known disconnect.
+- Serialized controller shadow updates after a live 30-request concurrency test showed that the crib rejects an unbounded simultaneous flood. Thirty queued bounce updates and thirty queued sound updates each completed in about 1.7 seconds without rejection, while warmed individual controls completed in roughly 50–80 milliseconds.
+- Added latest-value coalescing for Homey bounce level, sound level, maximum bounce, and maximum sound controls. A rapid burst executes the in-flight value and then only the newest pending value instead of replaying every intermediate selection.
+- Verified the installed app through Homey's local device API: warmed bounce and audio changes completed in 69–100 milliseconds, five simultaneous changes coalesced and completed in 143–155 milliseconds, no request timed out, and the crib was confirmed stopped and unlocked afterward.
