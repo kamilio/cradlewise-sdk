@@ -1338,3 +1338,12 @@ This is the running record of changes, evidence, findings, unresolved issues, an
 
 - Changed maximum bounce and maximum sound from Homey sliders to read-only percentage sensors. The native Cradlewise app remains the only UI for configuring these bounds, while Homey continues to display their reported values, retain Insights, and emit automatic change Flow triggers.
 - Removed Homey's `measure_battery` capability and internal-battery energy declaration. Although the cloud model exposes a battery-like telemetry field, this crib is not a user-serviceable battery device and Homey's permanent battery badge was misleading; power-source status remains available separately.
+
+## 2026-07-06 — Toolcraft workaround audit
+
+- Upgraded Toolcraft and Toolcraft Schema from 0.0.87 to 0.0.102 and verified the CLI, SDK, MCP, output schemas, strict declarations, packed consumer, and optional-dependency installation paths.
+- Removed the locally duplicated Toolcraft bundled-package membership allowlist. Release verification now checks the exact reviewed Toolcraft archive and validates bundled names, versions, and licenses against Toolcraft's schema-versioned composition manifest.
+- Declared Toolcraft Schema as a direct optional dependency because Cradlewise's generated public command-tree declarations reference `toolcraft-schema` types directly; the declaration smoke test proves both `exactOptionalPropertyTypes` modes without relying on transitive hoisting.
+- Retained the finite-command limitation for realtime subscriptions because Toolcraft still exposes request/response commands with progress rather than a cancellable typed stream. Retained explicit result schemas because Toolcraft still requires them for MCP `outputSchema` and structured content.
+- Extended Homey's lockfile-driven optional pruning to remove both Toolcraft and the direct Toolcraft Schema package, preserving the core-only Homey runtime boundary.
+- Filed `poe-platform/poe-code#508` for lifecycle-aware typed streaming and `poe-platform/poe-code#509` for the public declaration leak that currently requires downstream libraries to declare Toolcraft Schema directly.

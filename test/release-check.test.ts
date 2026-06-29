@@ -17,6 +17,7 @@ const releaseCheck = fileURLToPath(
   new URL("../scripts/release-check.mjs", import.meta.url),
 );
 const reviewedToolcraftBundles = [
+  "toolcraft-schema",
   "toolcraft-design",
   "@poe-code/frontmatter",
   "@poe-code/agent-mcp-config",
@@ -26,9 +27,11 @@ const reviewedToolcraftBundles = [
   "@poe-code/config-mutations",
   "@poe-code/process-runner",
   "tiny-mcp-client",
-  "mcp-oauth",
   "auth-store",
 ] as const;
+const reviewedToolcraftVersion = "0.0.102";
+const reviewedToolcraftIntegrity =
+  "sha512-xaiPVkQ4uq74M9XrmnwJ0KNRNlrDVLZTvtQJKq0asEKiFSysq4DJWySuopnmonLTFBPP03VxO9C5A1OfqTbc1Q==";
 
 describe("release dependency license check", () => {
   it("accepts licensed packages and declared bundled internals", async () => {
@@ -100,7 +103,38 @@ describe("release dependency license check", () => {
 
       const result = runReleaseCheck(directory);
       expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("unexpected integrity or membership");
+      expect(result.stderr).toContain(
+        "unexpected integrity, composition, or membership",
+      );
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects bundled package drift from the published composition", async () => {
+    const directory = await createFixture();
+    try {
+      const compositionPath = join(
+        directory,
+        "node_modules/toolcraft/dist/composition.json",
+      );
+      const composition = JSON.parse(
+        await readFile(compositionPath, "utf8"),
+      ) as {
+        packages: Array<{ name: string; version: string }>;
+      };
+      const schemaPackage = composition.packages.find(
+        ({ name }) => name === "toolcraft-schema",
+      );
+      if (!schemaPackage) throw new Error("Fixture schema package is missing");
+      schemaPackage.version = "9.9.9";
+      await writeFile(compositionPath, JSON.stringify(composition));
+
+      const result = runReleaseCheck(directory);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(
+        "unexpected integrity, composition, or membership",
+      );
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
@@ -299,9 +333,8 @@ async function createFixture(
     "": { name: "fixture", version: "1.0.0", license: "MIT" },
     "node_modules/licensed": lockPackage("licensed", "1.0.0"),
     "node_modules/toolcraft": {
-      ...lockPackage("toolcraft", "0.0.87"),
-      integrity:
-        "sha512-2l0vJmu1+C4zHuDEZi0v8ejL/odHP3yrXFhRt9ep0+sK7wOivH/qNHo2+W86aQkBZbfMe2JiFkfRgrrK6gZfkQ==",
+      ...lockPackage("toolcraft", reviewedToolcraftVersion),
+      integrity: reviewedToolcraftIntegrity,
     },
   };
   await writePackage(directory, "node_modules/licensed", {
@@ -328,10 +361,31 @@ async function createFixture(
   );
   await writePackage(directory, "node_modules/toolcraft", {
     name: "toolcraft",
-    version: "0.0.87",
+    version: reviewedToolcraftVersion,
     license: "MIT",
     bundleDependencies: [...reviewedToolcraftBundles],
   });
+  await mkdir(join(directory, "node_modules/toolcraft/dist"), {
+    recursive: true,
+  });
+  await writeFile(
+    join(directory, "node_modules/toolcraft/dist/composition.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      packages: [
+        {
+          name: "toolcraft",
+          version: reviewedToolcraftVersion,
+          license: "MIT",
+        },
+        ...reviewedToolcraftBundles.map((name) => ({
+          name,
+          version: "1.0.0",
+          license: "MIT",
+        })),
+      ],
+    }),
+  );
   for (const packageName of reviewedToolcraftBundles) {
     const packageDirectory = `node_modules/toolcraft/node_modules/${packageName}`;
     packages[packageDirectory] = { version: "1.0.0", inBundle: true };

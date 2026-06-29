@@ -90,7 +90,8 @@
     "mqtt": "5.15.2"
   },
   "optionalDependencies": {
-    "toolcraft": "0.0.87"
+    "toolcraft": "0.0.102",
+    "toolcraft-schema": "0.0.102"
   },
   "peerDependencies": {
     "aws-iot-device-sdk-v2": "^1.27.0"

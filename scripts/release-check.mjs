@@ -14,23 +14,11 @@ const REVIEWED_DECLARED_LICENSES = new Set([
 ]);
 const REVIEWED_BUNDLED_PARENTS = new Map([
   [
-    "toolcraft@0.0.87",
+    "toolcraft@0.0.102",
     {
       integrity:
-        "sha512-2l0vJmu1+C4zHuDEZi0v8ejL/odHP3yrXFhRt9ep0+sK7wOivH/qNHo2+W86aQkBZbfMe2JiFkfRgrrK6gZfkQ==",
-      packages: new Set([
-        "toolcraft-design",
-        "@poe-code/frontmatter",
-        "@poe-code/agent-mcp-config",
-        "@poe-code/agent-human-in-loop",
-        "@poe-code/task-list",
-        "@poe-code/agent-defs",
-        "@poe-code/config-mutations",
-        "@poe-code/process-runner",
-        "tiny-mcp-client",
-        "mcp-oauth",
-        "auth-store",
-      ]),
+        "sha512-xaiPVkQ4uq74M9XrmnwJ0KNRNlrDVLZTvtQJKq0asEKiFSysq4DJWySuopnmonLTFBPP03VxO9C5A1OfqTbc1Q==",
+      composition: "dist/composition.json",
     },
   ],
 ]);
@@ -51,6 +39,7 @@ if (
 const failures = [];
 const installationFailures = [];
 const packageCache = new Map();
+const bundleCache = new Map();
 const rootPackage = await readJsonRegularFile(
   "package.json",
   MAX_MANIFEST_BYTES,
@@ -108,7 +97,7 @@ for (const [directory, metadata] of Object.entries(lockfile.packages ?? {})) {
       `${directory}: expected=${expectedPackageName}@${String(metadata?.version)} installed=${String(dependencyPackage.name)}@${String(dependencyPackage.version)}`,
     );
   }
-  validateReviewedBundle(
+  await validateReviewedBundle(
     directory,
     metadata,
     dependencyPackage,
@@ -279,22 +268,31 @@ async function isCoveredByLicensedBundler(directory, packageName) {
     return false;
   }
   const parentPackage = await readPackage(parentDirectory);
-  const reviewedParent = REVIEWED_BUNDLED_PARENTS.get(
-    `${parentPackage.name}@${parentPackage.version}`,
-  );
+  let reviewedBundle;
+  try {
+    reviewedBundle = await readReviewedBundle(
+      parentDirectory,
+      parentMetadata,
+      parentPackage,
+    );
+  } catch {
+    return false;
+  }
   const bundles =
     parentPackage.bundleDependencies ?? parentPackage.bundledDependencies;
+  const bundledPackage = reviewedBundle?.packages.get(packageName);
+  const dependencyPackage = await readPackage(directory);
   return (
-    reviewedParent !== undefined &&
-    parentMetadata.integrity === reviewedParent.integrity &&
-    reviewedParent.packages.has(packageName) &&
+    reviewedBundle !== undefined &&
+    bundledPackage?.version === dependencyPackage.version &&
+    REVIEWED_DECLARED_LICENSES.has(bundledPackage.license.toUpperCase()) &&
     Array.isArray(bundles) &&
     bundles.includes(packageName) &&
     (await hasLicenseTerms(parentDirectory, parentPackage))
   );
 }
 
-function validateReviewedBundle(
+async function validateReviewedBundle(
   directory,
   metadata,
   dependencyPackage,
@@ -303,21 +301,92 @@ function validateReviewedBundle(
   const packageKey = `${dependencyPackage.name}@${dependencyPackage.version}`;
   const reviewedParent = REVIEWED_BUNDLED_PARENTS.get(packageKey);
   if (!reviewedParent) return;
+  try {
+    await readReviewedBundle(directory, metadata, dependencyPackage);
+  } catch {
+    failures.push(
+      `${directory}: reviewed bundle ${packageKey} has unexpected integrity, composition, or membership`,
+    );
+  }
+}
+
+async function readReviewedBundle(directory, metadata, dependencyPackage) {
+  if (bundleCache.has(directory)) return bundleCache.get(directory);
+  const packageKey = `${dependencyPackage.name}@${dependencyPackage.version}`;
+  const reviewedParent = REVIEWED_BUNDLED_PARENTS.get(packageKey);
+  if (!reviewedParent) return undefined;
+  if (metadata?.integrity !== reviewedParent.integrity) {
+    throw new Error("Reviewed bundle integrity changed");
+  }
+  const composition = await readJsonRegularFile(
+    join(directory, reviewedParent.composition),
+    MAX_MANIFEST_BYTES,
+  );
+  if (
+    !isPlainObject(composition) ||
+    composition.schemaVersion !== 1 ||
+    !Array.isArray(composition.packages)
+  ) {
+    throw new Error("Reviewed bundle composition is invalid");
+  }
+  const packages = new Map();
+  for (const value of composition.packages) {
+    if (
+      !isPlainObject(value) ||
+      typeof value.name !== "string" ||
+      value.name.length === 0 ||
+      typeof value.version !== "string" ||
+      value.version.length === 0 ||
+      typeof value.license !== "string" ||
+      value.license.length === 0 ||
+      packages.has(value.name)
+    ) {
+      throw new Error("Reviewed bundle composition package is invalid");
+    }
+    packages.set(value.name, {
+      version: value.version,
+      license: value.license,
+    });
+  }
+  const parentComposition = packages.get(dependencyPackage.name);
+  if (
+    parentComposition?.version !== dependencyPackage.version ||
+    parentComposition.license.toUpperCase() !==
+      String(dependencyPackage.license).toUpperCase()
+  ) {
+    throw new Error("Reviewed bundle parent composition changed");
+  }
   const bundles =
     dependencyPackage.bundleDependencies ??
     dependencyPackage.bundledDependencies;
   const actual = Array.isArray(bundles) ? bundles : [];
   const actualSet = new Set(actual);
-  const expected = [...reviewedParent.packages].sort();
+  const expected = [...packages.keys()]
+    .filter((name) => name !== dependencyPackage.name)
+    .sort();
   const normalizedActual = [...actualSet].sort();
   if (
-    metadata?.integrity !== reviewedParent.integrity ||
     actual.length !== actualSet.size ||
     normalizedActual.length !== expected.length ||
     normalizedActual.some((name, index) => name !== expected[index])
   ) {
-    failures.push(
-      `${directory}: reviewed bundle ${packageKey} has unexpected integrity or membership`,
-    );
+    throw new Error("Reviewed bundle membership changed");
   }
+  for (const name of expected) {
+    const childDirectory = join(directory, "node_modules", name);
+    const childMetadata = lockfile.packages?.[childDirectory];
+    const childPackage = await readPackage(childDirectory);
+    const expectedPackage = packages.get(name);
+    if (
+      childMetadata?.inBundle !== true ||
+      childMetadata.version !== expectedPackage.version ||
+      childPackage.name !== name ||
+      childPackage.version !== expectedPackage.version
+    ) {
+      throw new Error("Reviewed bundle package changed");
+    }
+  }
+  const reviewedBundle = Object.freeze({ packages });
+  bundleCache.set(directory, reviewedBundle);
+  return reviewedBundle;
 }
