@@ -27,11 +27,12 @@ const reviewedToolcraftBundles = [
   "@poe-code/config-mutations",
   "@poe-code/process-runner",
   "tiny-mcp-client",
+  "tiny-stdio-mcp-server",
   "auth-store",
 ] as const;
-const reviewedToolcraftVersion = "0.0.102";
+const reviewedToolcraftVersion = "0.0.109";
 const reviewedToolcraftIntegrity =
-  "sha512-xaiPVkQ4uq74M9XrmnwJ0KNRNlrDVLZTvtQJKq0asEKiFSysq4DJWySuopnmonLTFBPP03VxO9C5A1OfqTbc1Q==";
+  "sha512-dDglsvnwTxMZ91NJzZvCV7lg1LgP67E5M3h/yHWggAEVHUDCsegg1/zwSUAuVv09dVaPHhMAlybeumHZNaI7Ag==";
 
 describe("release dependency license check", () => {
   it("accepts licensed packages and declared bundled internals", async () => {
@@ -198,6 +199,52 @@ describe("release dependency license check", () => {
       const lockPath = join(directory, "package-lock.json");
       const lockfile = JSON.parse(await readFile(lockPath, "utf8"));
       lockfile.packages["node_modules/@scope/package"] = { version: "1.0.0" };
+      await writeFile(lockPath, JSON.stringify(lockfile));
+
+      const result = runReleaseCheck(directory);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(
+        "production package path is not a real directory",
+      );
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("accepts npm bundled metadata deduped to an exact ancestor package", async () => {
+    const directory = await createFixture();
+    try {
+      const deduped = lockPackage("deduped", "1.0.0");
+      await writePackage(directory, "node_modules/deduped", {
+        name: "deduped",
+        version: "1.0.0",
+        license: "MIT",
+      });
+      const lockPath = join(directory, "package-lock.json");
+      const lockfile = JSON.parse(await readFile(lockPath, "utf8"));
+      lockfile.packages["node_modules/deduped"] = deduped;
+      lockfile.packages["node_modules/toolcraft/node_modules/deduped"] = {
+        ...deduped,
+        inBundle: true,
+      };
+      await writeFile(lockPath, JSON.stringify(lockfile));
+
+      const result = runReleaseCheck(directory);
+      expect(result.status).toBe(0);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects bundled metadata without an exact locked ancestor package", async () => {
+    const directory = await createFixture();
+    try {
+      const lockPath = join(directory, "package-lock.json");
+      const lockfile = JSON.parse(await readFile(lockPath, "utf8"));
+      lockfile.packages["node_modules/toolcraft/node_modules/deduped"] = {
+        ...lockPackage("deduped", "1.0.0"),
+        inBundle: true,
+      };
       await writeFile(lockPath, JSON.stringify(lockfile));
 
       const result = runReleaseCheck(directory);

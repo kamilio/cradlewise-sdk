@@ -6,7 +6,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
-- Upgrade Toolcraft and Toolcraft Schema to 0.0.102, replace the duplicated bundled-package allowlist with Toolcraft's versioned composition manifest, and declare Toolcraft Schema directly because generated public command-tree declarations reference its types.
+- Upgrade Toolcraft to 0.0.109, remove the resolved direct Toolcraft Schema workaround, add a cancellable CLI/SDK/MCP `watch` stream for bounded REST status snapshots, and isolate the temporary AJV 8 compatibility dependency inside the optional Toolcraft boundary.
 - Harden date reads against mutation of `Function.prototype.call` and `Date.prototype.getTime` after module initialization.
 - Terminate POSIX validation, reproducibility, staging, and SDK-vendoring subprocess groups on timeout or output overflow so inherited descendants cannot survive a failed command.
 - Treat forwarded terminal signals as command failures even when the child exits zero, preventing interrupted build and vendoring workflows from continuing.

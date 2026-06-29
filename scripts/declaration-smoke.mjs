@@ -106,9 +106,6 @@ void cradlewiseToolcraftRoot;
               toolcraft: [
                 resolve(root, "node_modules/toolcraft/dist/index.d.ts"),
               ],
-              "toolcraft-schema": [
-                resolve(root, "node_modules/toolcraft-schema/dist/index.d.ts"),
-              ],
             },
             typeRoots: [resolve(root, "node_modules/@types")],
           },

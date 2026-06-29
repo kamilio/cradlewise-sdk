@@ -148,8 +148,8 @@ describe("package metadata", () => {
     );
     expect(packageJson.dependencies).not.toHaveProperty("toolcraft");
     expect(packageJson.optionalDependencies).toEqual({
-      toolcraft: "0.0.102",
-      "toolcraft-schema": "0.0.102",
+      ajv: "8.20.0",
+      toolcraft: "0.0.109",
     });
     expect(
       packageJson.peerDependenciesMeta["aws-iot-device-sdk-v2"]?.optional,

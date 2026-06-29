@@ -29,31 +29,10 @@ The REST client is production-ready relative to the known private API. The legac
 - Verify certificate rotation, device removal, topic authorization, and account logout cleanup.
 - Add packet-level fixtures and a dedicated opt-in live test before enabling certificate realtime by default.
 
-## Toolcraft improvement proposal
+## Toolcraft streaming
 
-Toolcraft maps a command handler to finite CLI, SDK, and MCP request/response calls. A realtime watch does not fit that lifecycle: the handler must remain alive, emit many typed values, react to cancellation, refresh credentials, and release subscriptions when a client disconnects.
+Toolcraft 0.0.109 provides `defineStreamCommand` with typed event schemas, `AbortSignal` cancellation, pull-based bounded delivery, status events, secret refresh, SDK async iteration, CLI NDJSON output, explicit MCP subscribe/unsubscribe sessions, and testing-harness stream support.
 
-A general Toolcraft streaming primitive could look like:
+Cradlewise now exposes `watch` through CLI, SDK, and MCP. The command emits an immediate bounded REST snapshot and continues polling every 15–300 seconds until cancelled. REST polling is intentional: the legacy `CradlewiseRealtime` IAM WebSocket implementation remains incompatible with the current certificate-based mobile protocol and is not used by the Toolcraft stream.
 
-```ts
-defineSubscription({
-  name: "watch",
-  params: S.Object({ cradleId: S.String() }),
-  event: S.Object({ cradleId: S.String(), state: S.Record(S.String()) }),
-  open: async ({ params, signal, emit }) => {
-    const subscription = await service.watch(params.cradleId, emit);
-    signal.addEventListener("abort", () => subscription.close(), {
-      once: true,
-    });
-    return () => subscription.close();
-  },
-});
-```
-
-Recommended runtime mappings:
-
-- **SDK:** return an `AsyncIterable<Event>` plus an explicit `close()` method.
-- **CLI:** render an interruptible stream until `SIGINT`, with optional NDJSON output.
-- **MCP:** expose a subscription resource or server notifications tied to the MCP session, rather than holding a normal tool call open indefinitely.
-
-The primitive needs first-class cancellation, bounded buffering/backpressure, heartbeat and reconnect status events, cleanup guarantees, event schemas, and secret refresh hooks. Until Toolcraft gains a lifecycle-aware stream surface, this package keeps realtime in the normal JavaScript API and exposes finite REST snapshots through Toolcraft.
+Explicit finite-command result schemas remain necessary for MCP `outputSchema` and structured content. Streaming commands instead declare an event schema that Toolcraft validates for every emitted snapshot.

@@ -1347,3 +1347,11 @@ This is the running record of changes, evidence, findings, unresolved issues, an
 - Retained the finite-command limitation for realtime subscriptions because Toolcraft still exposes request/response commands with progress rather than a cancellable typed stream. Retained explicit result schemas because Toolcraft still requires them for MCP `outputSchema` and structured content.
 - Extended Homey's lockfile-driven optional pruning to remove both Toolcraft and the direct Toolcraft Schema package, preserving the core-only Homey runtime boundary.
 - Filed `poe-platform/poe-code#508` for lifecycle-aware typed streaming and `poe-platform/poe-code#509` for the public declaration leak that currently requires downstream libraries to declare Toolcraft Schema directly.
+
+## 2026-07-06 — Resolved Toolcraft upstream issues
+
+- Confirmed `poe-platform/poe-code#508` and `#509` were completed and released, then upgraded to Toolcraft 0.0.109.
+- Removed the direct Toolcraft Schema optional dependency and declaration-smoke path mapping. Generated Cradlewise declarations now reference Toolcraft's re-exported schema types exclusively and contain no bare `toolcraft-schema` imports.
+- Added a typed `watch` stream to the shared Toolcraft command tree. CLI, SDK, and MCP consumers receive immediate and periodic bounded REST crib snapshots with Toolcraft-managed cancellation and pull-based buffering.
+- Kept the legacy IAM MQTT implementation outside Toolcraft because the current crib protocol requires certificate provisioning; the new stream uses the supported REST telemetry path instead.
+- A clean npm install exposed an optional-dependency resolver edge case that deduped Toolcraft's AJV 8 requirement to ESLint's incompatible AJV 6. AJV 8 is temporarily declared alongside optional Toolcraft, remains absent from core-only and Homey artifacts, and the upstream reproduction is filed as `poe-platform/poe-code#511`.

@@ -1,4 +1,11 @@
-import { defineCommand, defineGroup, S, UserError } from "toolcraft";
+import {
+  defineCommand,
+  defineGroup,
+  defineStreamCommand,
+  S,
+  type Static,
+  UserError,
+} from "toolcraft";
 import { CradlewiseAuth } from "./auth.js";
 import { CradlewiseClient, formatApiDate } from "./client.js";
 import { CradlewiseController } from "./controls.js";
@@ -9,6 +16,9 @@ import { utf8ByteLength } from "./text-utils.js";
 
 const MAX_TOOL_RESULT_NODES = 1_000_000;
 const MAX_TOOL_RESULT_TEXT_BYTES = 16 * 1024 * 1024;
+const DEFAULT_WATCH_INTERVAL_SECONDS = 30;
+const MIN_WATCH_INTERVAL_SECONDS = 15;
+const MAX_WATCH_INTERVAL_SECONDS = 300;
 
 const secrets = {
   email: {
@@ -63,6 +73,8 @@ const controlStateResult = S.Object({
   shadowVersion: S.Optional(S.Number({ jsonType: "integer", minimum: 0 })),
 });
 
+const watchEvent = S.Object({ cradles: S.Array(cradleResult) });
+
 const list = defineCommand({
   name: "list",
   description: "List cribs paired with the Cradlewise account",
@@ -99,6 +111,46 @@ const status = defineCommand({
     const discovered = await client.discoverCradles();
     const selected = selectCradles(discovered, requestedCradleId);
     return { cradles: await updateCradles(client, selected) };
+  },
+});
+
+const watch = defineStreamCommand({
+  name: "watch",
+  description:
+    "Continuously poll crib state, connectivity, and firmware until cancelled",
+  params: S.Object({
+    cradleId: S.Optional(
+      S.String({
+        description: "Crib ID; omit to watch every paired crib",
+        minLength: 1,
+        maxLength: 256,
+      }),
+    ),
+    intervalSeconds: S.Optional(
+      S.Number({
+        description: "Polling interval from 15 through 300 seconds",
+        default: DEFAULT_WATCH_INTERVAL_SECONDS,
+        jsonType: "integer",
+        minimum: MIN_WATCH_INTERVAL_SECONDS,
+        maximum: MAX_WATCH_INTERVAL_SECONDS,
+      }),
+    ),
+  }),
+  event: watchEvent,
+  secrets,
+  scope: ["cli", "mcp", "sdk"],
+  handler: async (context) => {
+    const { params, secrets: credentials, signal } = context;
+    const requestedCradleId = optionalCradleId(params.cradleId);
+    const intervalSeconds = watchInterval(params.intervalSeconds);
+    const client = await createClient(credentials.email, credentials.password);
+    const discovered = await client.discoverCradles();
+    const selected = selectCradles(discovered, requestedCradleId);
+    context.status({
+      type: "connected",
+      message: "Cradlewise status watch started",
+    });
+    return watchCradles(client, selected, intervalSeconds, signal);
   },
 });
 
@@ -324,6 +376,7 @@ export const cradlewiseToolcraftRoot = defineGroup({
   children: [
     list,
     status,
+    watch,
     analytics,
     controlStatus,
     startSoothing,
@@ -469,6 +522,50 @@ function optionalStartHour(value: unknown): number | undefined {
     throw new UserError("startHour must be an integer from 0 through 23");
   }
   return value;
+}
+
+function watchInterval(value: unknown): number {
+  if (value === undefined) return DEFAULT_WATCH_INTERVAL_SECONDS;
+  if (
+    !Number.isInteger(value) ||
+    (value as number) < MIN_WATCH_INTERVAL_SECONDS ||
+    (value as number) > MAX_WATCH_INTERVAL_SECONDS
+  ) {
+    throw new UserError(
+      "intervalSeconds must be an integer from 15 through 300",
+    );
+  }
+  return value as number;
+}
+
+async function* watchCradles(
+  client: CradlewiseClient,
+  cradles: Cradle[],
+  intervalSeconds: number,
+  signal: AbortSignal,
+): AsyncGenerator<Static<typeof watchEvent>> {
+  while (!signal.aborted) {
+    yield boundedResult({
+      cradles: await updateCradles(client, cradles),
+    }) as Static<typeof watchEvent>;
+    await waitForWatchInterval(intervalSeconds * 1000, signal);
+  }
+}
+
+function waitForWatchInterval(
+  milliseconds: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolvePromise) => {
+    const timer = setTimeout(finish, milliseconds);
+    function finish() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolvePromise();
+    }
+    signal.addEventListener("abort", finish, { once: true });
+  });
 }
 
 function hasControlCharacter(value: string): boolean {

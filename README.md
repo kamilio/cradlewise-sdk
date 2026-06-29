@@ -158,7 +158,7 @@ Realtime listeners are typed through the exported `CradlewiseRealtimeEventMap`. 
 
 The package uses [Toolcraft](https://github.com/poe-platform/poe-code/tree/main/packages/toolcraft) to define one read-only command tree for CLI, SDK, and MCP surfaces.
 
-Toolcraft and Toolcraft Schema are default-installed optional dependencies so core-only environments such as Homey can use `npm install --omit=optional` without shipping the CLI/MCP graph. Normal npm installs include them; the `cradlewise` executable and `cradlewise/toolcraft` export require Toolcraft to be installed. Toolcraft Schema is declared directly because the generated public command-tree declarations reference its schema types.
+Toolcraft is a default-installed optional dependency so core-only environments such as Homey can use `npm install --omit=optional` without shipping the CLI/MCP graph. Normal npm installs include it; the `cradlewise` executable and `cradlewise/toolcraft` export require Toolcraft to be installed. Toolcraft bundles its schema implementation and re-exports the complete public schema type surface, so downstream declarations do not require a separate `toolcraft-schema` dependency. AJV 8 is temporarily declared in the same optional boundary to prevent npm from incorrectly satisfying Toolcraft with ESLint's incompatible AJV 6; this upstream packaging issue is tracked as `poe-platform/poe-code#511`.
 
 ```sh
 export CRADLEWISE_LOGIN=parent@example.com
@@ -167,6 +167,7 @@ export CRADLEWISE_PASSWORD='...'
 npx cradlewise list
 npx cradlewise status
 npx cradlewise status --cradle-id CRIB_ID --output json
+npx cradlewise watch --cradle-id CRIB_ID --interval-seconds 30 --output ndjson
 npx cradlewise analytics --cradle-id CRIB_ID --start-date 2026-06-01T00:00:00Z --end-date 2026-06-08T00:00:00Z --output json
 npx cradlewise sleep-insights --cradle-id CRIB_ID --output json
 npx cradlewise control-status --cradle-id CRIB_ID --output json
@@ -192,11 +193,16 @@ import { cradlewiseToolcraftRoot } from "cradlewise/toolcraft";
 
 const sdk = createSDK(cradlewiseToolcraftRoot);
 const result = await sdk.list({});
+
+const stream = sdk.watch({ cradleId: "CRIB_ID", intervalSeconds: 30 });
+for await (const snapshot of stream) {
+  console.log(snapshot.cradles);
+}
 ```
 
 Toolcraft commands publish explicit crib and analytics output schemas for CLI, SDK, and MCP consumers. Extensible state and event payloads remain JSON-typed because the private service can add fields independently of this package.
 
-Realtime watching is deliberately not exposed as an MCP tool because Toolcraft commands currently model finite request/response operations. The design note proposes lifecycle-aware subscriptions as a Toolcraft improvement.
+`watch` is a lifecycle-aware Toolcraft stream exposed through CLI, SDK, and MCP. It emits an immediate bounded REST snapshot, continues at a 15–300 second polling interval, uses pull-based delivery, and stops cleanly when its SDK consumer, CLI process, or MCP subscription cancels. It deliberately does not use the incompatible legacy IAM MQTT transport.
 
 ## Error handling
 
@@ -250,7 +256,7 @@ Coverage gates apply per production file, and production source rejects explicit
 
 `npm run check` also builds the declarations and compiles strict consumers with library checking enabled and `exactOptionalPropertyTypes` both disabled and enabled. This guards both common TypeScript configurations and the `cradlewise/toolcraft` export before packaging.
 
-Both `prepublishOnly` and the release workflow run `npm run release:check`. The check requires an npm lockfile v3, verifies that installed production package versions match `package-lock.json`, rejects production packages that declare install scripts, validates every independently installed production package, and accepts file-based terms only from bounded, nonempty regular LICENSE/COPYING files. CI and release installation use `npm ci --ignore-scripts`, while final pack/publish commands also disable lifecycle scripts. The bundled-internal exception is restricted to the exact reviewed Toolcraft 0.0.102 tarball integrity; bundle membership, exact versions, and licenses are verified from Toolcraft's versioned composition manifest instead of a local duplicate allowlist. Package inspection uses Node's native dotenv parser and checks both local environment values and cached bootstrap identifiers against source files and the exact tar archive. Toolcraft 0.0.102 and Toolcraft Schema 0.0.102 declare MIT terms, so the release gate passes.
+Both `prepublishOnly` and the release workflow run `npm run release:check`. The check requires an npm lockfile v3, verifies that installed production package versions match `package-lock.json`, rejects production packages that declare install scripts, validates every independently installed production package, and accepts file-based terms only from bounded, nonempty regular LICENSE/COPYING files. CI and release installation use `npm ci --ignore-scripts`, while final pack/publish commands also disable lifecycle scripts. The bundled-internal exception is restricted to the exact reviewed Toolcraft 0.0.109 tarball integrity; bundle membership, exact versions, and licenses are verified from Toolcraft's versioned composition manifest instead of a local duplicate allowlist. Package inspection uses Node's native dotenv parser and checks both local environment values and cached bootstrap identifiers against source files and the exact tar archive. Toolcraft 0.0.109 and its bundled Toolcraft Schema 0.0.109 declare MIT terms, so the release gate passes.
 
 Before the first release, create the public `kjopek/cradlewise-js` repository and add an environment-scoped `NPM_TOKEN` granular publish token to bootstrap the unclaimed npm package. After `cradlewise` exists on npm, configure the `release.yml` trusted publisher with publish permission and remove the token secret; subsequent releases use short-lived OIDC credentials. The release job pins npm 11.18.0 and disables dependency caching.
 

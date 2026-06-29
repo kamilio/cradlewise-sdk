@@ -370,7 +370,7 @@ try {
     ],
     coreSmokeRoot,
   );
-  for (const omitted of ["toolcraft", "toolcraft-schema"]) {
+  for (const omitted of ["ajv", "toolcraft"]) {
     if (existsSync(join(consumer, "node_modules", omitted))) {
       throw new Error(`Core-only package smoke installed ${omitted}`);
     }

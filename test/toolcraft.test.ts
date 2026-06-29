@@ -31,6 +31,7 @@ describe("Toolcraft commands", () => {
     expect(Object.keys(sdk)).toEqual([
       "list",
       "status",
+      "watch",
       "analytics",
       "controlStatus",
       "start",
@@ -41,6 +42,7 @@ describe("Toolcraft commands", () => {
     ]);
     expect(typeof sdk.list).toBe("function");
     expect(typeof sdk.status).toBe("function");
+    expect(typeof sdk.watch).toBe("function");
     expect(typeof sdk.analytics).toBe("function");
     expect(typeof sdk.controlStatus).toBe("function");
     expect(typeof sdk.start).toBe("function");
@@ -48,6 +50,52 @@ describe("Toolcraft commands", () => {
     expect(typeof sdk.lock).toBe("function");
     expect(typeof sdk.unlock).toBe("function");
     expect(typeof sdk.refreshConfig).toBe("function");
+  });
+
+  it("streams bounded status snapshots until cancelled", async () => {
+    mocks.getAppConfig.mockResolvedValue(
+      new AppConfig({
+        cognitoUserPoolId: "pool",
+        cognitoAppClientId: "client",
+        cognitoAppClientSecret: "secret",
+        cognitoIdentityPoolId: "identity",
+        cognitoRegion: "us-east-1",
+        apiBaseUrl: "https://backend.cradlewise.com",
+      }),
+    );
+    const cradle = new Cradle({ cradleId: "crib", state: { mode: "manual" } });
+    const discover = vi
+      .spyOn(CradlewiseClient.prototype, "discoverCradles")
+      .mockResolvedValue(new Map([[cradle.cradleId, cradle]]));
+    const update = vi
+      .spyOn(CradlewiseClient.prototype, "updateCradle")
+      .mockResolvedValue(cradle);
+    const statuses: string[] = [];
+    const sdk = createSDK(cradlewiseToolcraftRoot, {
+      env: {
+        CRADLEWISE_LOGIN: "parent@example.com",
+        CRADLEWISE_PASSWORD: "password",
+      },
+    });
+    const stream = sdk.watch(
+      { intervalSeconds: 15 },
+      { onStatus: ({ type }) => statuses.push(type) },
+    );
+    const iterator = stream[Symbol.asyncIterator]();
+
+    try {
+      await expect(iterator.next()).resolves.toMatchObject({
+        done: false,
+        value: { cradles: [{ cradleId: "crib" }] },
+      });
+      expect(statuses).toContain("connected");
+      expect(update).toHaveBeenCalledTimes(1);
+    } finally {
+      await stream.cancel();
+    }
+    await expect(iterator.next()).resolves.toMatchObject({ done: true });
+    discover.mockRestore();
+    update.mockRestore();
   });
 
   it("rejects malformed command inputs before loading configuration", async () => {

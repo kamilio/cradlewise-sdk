@@ -14,10 +14,10 @@ const REVIEWED_DECLARED_LICENSES = new Set([
 ]);
 const REVIEWED_BUNDLED_PARENTS = new Map([
   [
-    "toolcraft@0.0.102",
+    "toolcraft@0.0.109",
     {
       integrity:
-        "sha512-xaiPVkQ4uq74M9XrmnwJ0KNRNlrDVLZTvtQJKq0asEKiFSysq4DJWySuopnmonLTFBPP03VxO9C5A1OfqTbc1Q==",
+        "sha512-dDglsvnwTxMZ91NJzZvCV7lg1LgP67E5M3h/yHWggAEVHUDCsegg1/zwSUAuVv09dVaPHhMAlybeumHZNaI7Ag==",
       composition: "dist/composition.json",
     },
   ],
@@ -77,13 +77,17 @@ for (const [directory, metadata] of Object.entries(lockfile.packages ?? {})) {
       `${directory}: production package declares an install script`,
     );
   }
-  if (!(await isRealPackageDirectory(directory))) {
+  const installedDirectory = await resolveInstalledPackageDirectory(
+    directory,
+    metadata,
+  );
+  if (!installedDirectory) {
     installationFailures.push(
       `${directory}: production package path is not a real directory`,
     );
     continue;
   }
-  const dependencyPackage = await readPackage(directory);
+  const dependencyPackage = await readPackage(installedDirectory);
   const expectedPackageName = packageNameFromDirectory(directory);
   if (
     typeof dependencyPackage.name !== "string" ||
@@ -98,12 +102,13 @@ for (const [directory, metadata] of Object.entries(lockfile.packages ?? {})) {
     );
   }
   await validateReviewedBundle(
-    directory,
+    installedDirectory,
     metadata,
     dependencyPackage,
     installationFailures,
   );
   const coveredByReviewedBundle =
+    installedDirectory === directory &&
     metadata?.inBundle === true &&
     (await isCoveredByLicensedBundler(directory, dependencyPackage.name));
   if (!coveredByReviewedBundle && !hasReviewedRegistrySource(metadata)) {
@@ -112,7 +117,7 @@ for (const [directory, metadata] of Object.entries(lockfile.packages ?? {})) {
     );
   }
   if (coveredByReviewedBundle) continue;
-  if (!(await hasLicenseTerms(directory, dependencyPackage))) {
+  if (!(await hasLicenseTerms(installedDirectory, dependencyPackage))) {
     failures.push(`${dependencyPackage.name}@${dependencyPackage.version}`);
   }
 }
@@ -206,6 +211,39 @@ async function isRealPackageDirectory(directory) {
   } catch {
     return false;
   }
+}
+
+async function resolveInstalledPackageDirectory(directory, metadata) {
+  if (await isRealPackageDirectory(directory)) return directory;
+  if (metadata?.inBundle !== true) return undefined;
+
+  const packageName = packageNameFromDirectory(directory);
+  let parentDirectory = directory.slice(
+    0,
+    directory.lastIndexOf("/node_modules/"),
+  );
+  while (parentDirectory.startsWith("node_modules/")) {
+    const marker = parentDirectory.lastIndexOf("/node_modules/");
+    const candidate =
+      marker < 0
+        ? join("node_modules", packageName)
+        : join(parentDirectory.slice(0, marker), "node_modules", packageName);
+    const candidateMetadata = lockfile.packages?.[candidate];
+    if (
+      isPlainObject(candidateMetadata) &&
+      candidateMetadata.dev !== true &&
+      candidateMetadata.link !== true &&
+      candidateMetadata.version === metadata.version &&
+      candidateMetadata.resolved === metadata.resolved &&
+      candidateMetadata.integrity === metadata.integrity &&
+      (await isRealPackageDirectory(candidate))
+    ) {
+      return candidate;
+    }
+    if (marker < 0) break;
+    parentDirectory = parentDirectory.slice(0, marker);
+  }
+  return undefined;
 }
 
 async function hasLicenseTerms(directory, dependencyPackage) {
