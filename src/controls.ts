@@ -13,10 +13,18 @@ import { PACKAGE_VERSION } from "./version.js";
 const DEFAULT_OPERATION_TIMEOUT_MS = 20_000;
 const DEFAULT_REGISTRATION_ID = "cradlewise-sdk-cli";
 const MAX_LEVEL = 99;
+const MAX_SOOTHING_LEVEL = 5;
+const MAX_PERCENT = 100;
 const MAX_LOCK_MINUTES = 60;
 const MAX_SHADOW_BYTES = 1024 * 1024;
 
 export interface StartSoothingOptions {
+  bounceLevel: number;
+  soundLevel: number;
+  lockMinutes?: number;
+}
+
+export interface StartSoothingLevelsOptions {
   bounceLevel: number;
   soundLevel: number;
   lockMinutes?: number;
@@ -28,6 +36,10 @@ export interface CradleControlState {
   bounceLevel: number;
   soundOn: boolean;
   soundLevel: number;
+  bounceIntensityLevel?: number;
+  soundIntensityLevel?: number;
+  maxBouncePercent?: number;
+  maxSoundPercent?: number;
   locked: boolean;
   lockMinutes: number;
   shadowVersion?: number;
@@ -192,29 +204,161 @@ export class CradlewiseController {
     );
   }
 
+  async startSoothingLevels(
+    options: StartSoothingLevelsOptions,
+  ): Promise<CradleControlState> {
+    if (!isPlainObject(options))
+      throw new TypeError("options must be an object");
+    const bounceLevel = requireSoothingLevel(
+      options.bounceLevel,
+      "bounceLevel",
+    );
+    const soundLevel = requireSoothingLevel(options.soundLevel, "soundLevel");
+    const lockMinutes = optionalLockMinutes(options.lockMinutes);
+    const shadow = await this.#getShadow();
+    const current = controlStateFromShadow(shadow);
+    const desired: JsonObject = {
+      ...(bounceLevel > 0
+        ? { bounceLevel: bounceLevel - 1 }
+        : { actuator: { on: false } }),
+      ...(soundLevel > 0
+        ? {
+            musicLevel: soundLevel - 1,
+            soundSynth: {
+              ...snapshotObject(shadow.state?.reported?.soundSynth),
+              play: true,
+            },
+          }
+        : {
+            soundSynth: {
+              ...snapshotObject(shadow.state?.reported?.soundSynth),
+              play: false,
+            },
+          }),
+      autoModeLockOn: lockMinutes !== undefined,
+      ...(lockMinutes === undefined
+        ? {}
+        : { autoModeLockDuration: lockMinutes }),
+    };
+    await this.#shadowRequest("update", { state: { desired } });
+    return {
+      ...current,
+      active: bounceLevel > 0 || soundLevel > 0,
+      bounceOn: bounceLevel > 0,
+      soundOn: soundLevel > 0,
+      bounceIntensityLevel: bounceLevel,
+      soundIntensityLevel: soundLevel,
+      locked: lockMinutes !== undefined,
+      ...(lockMinutes === undefined ? {} : { lockMinutes }),
+    };
+  }
+
   async setBounceLevel(level: number): Promise<CradleControlState> {
     const bounceLevel = requireLevel(level, "level");
-    return this.#updateAndConfirm(
-      { actuator: { on: bounceLevel > 0, amplitude: bounceLevel } },
-      (state) =>
-        state.bounceLevel === bounceLevel && state.bounceOn === level > 0,
-    );
+    const current = await this.getState();
+    await this.#shadowRequest("update", {
+      state: {
+        desired: { actuator: { on: bounceLevel > 0, amplitude: bounceLevel } },
+      },
+    });
+    return {
+      ...current,
+      active: bounceLevel > 0 || current.soundOn,
+      bounceOn: bounceLevel > 0,
+      bounceLevel,
+    };
   }
 
   async setSoundLevel(level: number): Promise<CradleControlState> {
     const soundLevel = requireLevel(level, "level");
     const shadow = await this.#getShadow();
+    const current = controlStateFromShadow(shadow);
     const soundSynth = snapshotObject(shadow.state?.reported?.soundSynth);
-    return this.#updateAndConfirm(
-      {
-        soundSynth: {
-          ...soundSynth,
-          play: soundLevel > 0,
-          volume: soundLevel,
+    await this.#shadowRequest("update", {
+      state: {
+        desired: {
+          soundSynth: {
+            ...soundSynth,
+            play: soundLevel > 0,
+            volume: soundLevel,
+          },
         },
       },
-      (state) => state.soundLevel === soundLevel && state.soundOn === level > 0,
-    );
+    });
+    return {
+      ...current,
+      active: current.bounceOn || soundLevel > 0,
+      soundOn: soundLevel > 0,
+      soundLevel,
+    };
+  }
+
+  async setBounceIntensityLevel(level: number): Promise<CradleControlState> {
+    const bounceLevel = requireSoothingLevel(level, "level");
+    const current = await this.getState();
+    await this.#shadowRequest("update", {
+      state: {
+        desired:
+          bounceLevel > 0
+            ? { bounceLevel: bounceLevel - 1 }
+            : { actuator: { on: false } },
+      },
+    });
+    return {
+      ...current,
+      active: bounceLevel > 0 || current.soundOn,
+      bounceOn: bounceLevel > 0,
+      bounceIntensityLevel: bounceLevel,
+    };
+  }
+
+  async setSoundIntensityLevel(level: number): Promise<CradleControlState> {
+    const soundLevel = requireSoothingLevel(level, "level");
+    const shadow = await this.#getShadow();
+    const current = controlStateFromShadow(shadow);
+    await this.#shadowRequest("update", {
+      state: {
+        desired:
+          soundLevel > 0
+            ? {
+                musicLevel: soundLevel - 1,
+                soundSynth: {
+                  ...snapshotObject(shadow.state?.reported?.soundSynth),
+                  play: true,
+                },
+              }
+            : {
+                soundSynth: {
+                  ...snapshotObject(shadow.state?.reported?.soundSynth),
+                  play: false,
+                },
+              },
+      },
+    });
+    return {
+      ...current,
+      active: current.bounceOn || soundLevel > 0,
+      soundOn: soundLevel > 0,
+      soundIntensityLevel: soundLevel,
+    };
+  }
+
+  async setMaxBouncePercent(percent: number): Promise<CradleControlState> {
+    const maxBouncePercent = requirePercent(percent, "percent");
+    const current = await this.getState();
+    await this.#shadowRequest("update", {
+      state: { desired: { maxBounceLimit: maxBouncePercent } },
+    });
+    return { ...current, maxBouncePercent };
+  }
+
+  async setMaxSoundPercent(percent: number): Promise<CradleControlState> {
+    const maxSoundPercent = requirePercent(percent, "percent");
+    const current = await this.getState();
+    await this.#shadowRequest("update", {
+      state: { desired: { maxVolumeLimit: maxSoundPercent } },
+    });
+    return { ...current, maxSoundPercent };
   }
 
   async lock(minutes = 30): Promise<CradleControlState> {
@@ -502,6 +646,10 @@ function controlStateFromShadow(shadow: ShadowDocument): CradleControlState {
   const soundOn = soundSynth.play === true;
   const bounceLevel = safeLevel(actuator.amplitude);
   const soundLevel = safeLevel(soundSynth.volume);
+  const bounceIntensityLevel = safeSoothingLevel(reported.bounceLevel);
+  const soundIntensityLevel = safeSoothingLevel(reported.musicLevel);
+  const maxBouncePercent = safePercent(reported.maxBounceLimit);
+  const maxSoundPercent = safePercent(reported.maxVolumeLimit);
   const locked = reported.autoModeLockOn === true;
   const lockMinutes = safeLockMinutes(reported.autoModeLockDuration);
   return {
@@ -510,6 +658,10 @@ function controlStateFromShadow(shadow: ShadowDocument): CradleControlState {
     bounceLevel,
     soundOn,
     soundLevel,
+    ...(bounceIntensityLevel === undefined ? {} : { bounceIntensityLevel }),
+    ...(soundIntensityLevel === undefined ? {} : { soundIntensityLevel }),
+    ...(maxBouncePercent === undefined ? {} : { maxBouncePercent }),
+    ...(maxSoundPercent === undefined ? {} : { maxSoundPercent }),
     locked,
     lockMinutes,
     ...(Number.isSafeInteger(shadow.version)
@@ -559,6 +711,44 @@ function safeLevel(value: unknown): number {
     (value as number) <= MAX_LEVEL
     ? (value as number)
     : 0;
+}
+
+function requireSoothingLevel(value: unknown, name: string): number {
+  if (
+    !Number.isInteger(value) ||
+    (value as number) < 0 ||
+    (value as number) > MAX_SOOTHING_LEVEL
+  ) {
+    throw new RangeError(`${name} must be an integer from 0 through 5`);
+  }
+  return value as number;
+}
+
+function safeSoothingLevel(value: unknown): number | undefined {
+  return Number.isInteger(value) &&
+    (value as number) >= 0 &&
+    (value as number) < MAX_SOOTHING_LEVEL
+    ? (value as number) + 1
+    : undefined;
+}
+
+function requirePercent(value: unknown, name: string): number {
+  if (
+    !Number.isInteger(value) ||
+    (value as number) < 0 ||
+    (value as number) > MAX_PERCENT
+  ) {
+    throw new RangeError(`${name} must be an integer from 0 through 100`);
+  }
+  return value as number;
+}
+
+function safePercent(value: unknown): number | undefined {
+  return Number.isInteger(value) &&
+    (value as number) >= 0 &&
+    (value as number) <= MAX_PERCENT
+    ? (value as number)
+    : undefined;
 }
 
 function optionalLockMinutes(value: unknown): number | undefined {

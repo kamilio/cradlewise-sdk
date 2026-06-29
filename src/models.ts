@@ -244,6 +244,15 @@ export class Cradle {
       readNestedStateField(this.#state, ["actuator", "amplitude"]),
     );
   }
+  get bounceIntensityLevel(): number | undefined {
+    const value = toInteger(readStateField(this.#state, "bounceLevel"));
+    return value !== undefined && value >= 0 && value <= 4
+      ? value + 1
+      : undefined;
+  }
+  get maxBouncePercent(): number | undefined {
+    return toPercent(readStateField(this.#state, "maxBounceLimit"));
+  }
   get musicPlaying(): boolean | undefined {
     return toBoolean(
       readNestedStateField(
@@ -261,6 +270,15 @@ export class Cradle {
         ["soundSynth", "volume"],
       ),
     );
+  }
+  get musicIntensityLevel(): number | undefined {
+    const value = toInteger(readStateField(this.#state, "musicLevel"));
+    return value !== undefined && value >= 0 && value <= 4
+      ? value + 1
+      : undefined;
+  }
+  get maxMusicPercent(): number | undefined {
+    return toPercent(readStateField(this.#state, "maxVolumeLimit"));
   }
   get musicMood(): string | undefined {
     return toString(
@@ -627,6 +645,13 @@ function validateOptionalDisplayString(value: unknown, field: string): void {
 function toInteger(value: unknown): number | undefined {
   const parsed = toNumber(value);
   return parsed !== undefined && Number.isInteger(parsed) ? parsed : undefined;
+}
+
+function toPercent(value: unknown): number | undefined {
+  const parsed = toInteger(value);
+  return parsed !== undefined && parsed >= 0 && parsed <= 100
+    ? parsed
+    : undefined;
 }
 
 function toBoolean(value: unknown): boolean | undefined {

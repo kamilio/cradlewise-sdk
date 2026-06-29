@@ -209,10 +209,16 @@ When a newer Android bundle is inspected, update this document in the same chang
 
 The Android 2.57.8 bundle (version code 211) confirms that current crib controls use an AWS IoT device shadow over mutual TLS. The app obtains a per-registration certificate and private key from `POST /cradles/pairedUsers/v3`, downloads the two configured S3 objects with the account's temporary AWS credentials, and publishes desired state to `$aws/things/{cradle_id}/shadow/update`.
 
-The reviewed, user-facing control fields are:
+The native soothing controls separate the visible level from its maximum:
 
-- bounce power and level: `actuator.on` plus `actuator.amplitude` from 0 through 99;
-- sound power and level: `soundSynth.play` plus `soundSynth.volume` from 0 through 99, preserving the remaining reported `soundSynth` fields;
-- control lock: `autoModeLockOn` and `autoModeLockDuration` from 1 through 60 minutes.
+- bounce Off uses `actuator.on = false`; visible levels 1 through 5 publish `bounceLevel` indices 0 through 4;
+- sound Off uses `soundSynth.play = false`; visible levels 1 through 5 publish `musicLevel` indices 0 through 4;
+- maximum bounce publishes `maxBounceLimit` as an integer percentage;
+- maximum sound publishes `maxVolumeLimit` as an integer percentage;
+- the crib reports dynamic `bounceLevelAmplitudes` and `musicLevelVolumes` recipes, so firmware maps each selected level under the configured maximum;
+- low-level manual preview controls remain available as `actuator.amplitude` and `soundSynth.volume` from 0 through 99, preserving the remaining reported `soundSynth` fields;
+- control lock uses `autoModeLockOn` and `autoModeLockDuration` from 1 through 60 minutes.
 
-The similarly named top-level `bounceLevel` and `musicLevel` fields are internal five-step recipe indices and are not used for Homey sliders. A live crib test on July 6, 2026 confirmed start at bounce 5 and sound 5 with a five-minute lock, stop while retaining the lock, and explicit unlock. The crib was left stopped and unlocked. Calibration, obstruction handling, firmware operations, and other service controls remain outside the supported surface.
+The Android dashboard passes `-1` for Off and sends indices 0 through 4 for visible levels 1 through 5. Selecting a non-Off bounce or sound level also turns that channel on; selecting Off turns only that channel off. Homey follows the same model with Off/1–5 pickers and separate percentage maximums. Its main On control reuses the saved picker selections and falls back to level 1 for both channels only when both selections are Off, ensuring On always starts soothing. Level and maximum changes return after the accepted shadow update instead of polling for a second confirmation, preventing slider/picker changes from timing out while the crib applies its dynamic recipe.
+
+A live crib test on July 6, 2026 confirmed the current shadow protocol. The crib was left stopped and unlocked. Calibration, obstruction handling, firmware operations, and other service controls remain outside the supported surface.

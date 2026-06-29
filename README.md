@@ -217,7 +217,7 @@ All package errors extend `CradlewiseError`:
 
 ## Homey app
 
-`packages/homey-app` contains an unofficial Homey SDK v3 app built on the packed SDK. It exposes crib sensors, bounce and sound sliders, on/off soothing, control locking, sleep insights, Flow actions with chosen bounce/sound levels and optional locking, automatic capability triggers, manual refresh, a saved-photo Advanced Flow image token, credential repair, and bounded polling on Homey Pro.
+`packages/homey-app` contains an unofficial Homey SDK v3 app built on the packed SDK. It exposes crib sensors, native Off/1–5 bounce and sound pickers, separate maximum-percentage controls, on/off soothing, control locking, sleep insights, Flow actions with chosen bounce/sound levels and optional locking, automatic capability triggers, manual refresh, a saved-photo Advanced Flow image token, credential repair, diagnostics, and bounded polling on Homey Pro.
 
 The integration is not a safety-critical baby monitor and must not replace the official Cradlewise app.
 

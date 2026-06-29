@@ -9,6 +9,7 @@ export { CradlewiseController } from "./controls.js";
 export type {
   CradleControlState,
   CradlewiseControllerOptions,
+  StartSoothingLevelsOptions,
   StartSoothingOptions,
 } from "./controls.js";
 export {

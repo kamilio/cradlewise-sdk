@@ -156,7 +156,11 @@ describe("Cradle", () => {
         babyPresent: true,
         babySleepPhaseV2: { eventValue: 4 },
         actuator: { on: true, amplitude: "3" },
+        bounceLevel: 4,
+        maxBounceLimit: 80,
         music: { play: true, volume: "7", mood: "calm" },
+        musicLevel: 2,
+        maxVolumeLimit: 60,
         light: { lightOn: true, lightIntensity: "2" },
         deviceStatus: {
           batteryLife: "88",
@@ -172,8 +176,12 @@ describe("Cradle", () => {
     expect(cradle.sleepPhaseName).toBe("sleep");
     expect(cradle.bouncing).toBe(true);
     expect(cradle.bounceAmplitude).toBe(3);
+    expect(cradle.bounceIntensityLevel).toBe(5);
+    expect(cradle.maxBouncePercent).toBe(80);
     expect(cradle.musicPlaying).toBe(true);
     expect(cradle.musicVolume).toBe(7);
+    expect(cradle.musicIntensityLevel).toBe(3);
+    expect(cradle.maxMusicPercent).toBe(60);
     expect(cradle.musicMood).toBe("calm");
     expect(cradle.lightOn).toBe(true);
     expect(cradle.lightIntensity).toBe(2);
@@ -376,7 +384,11 @@ describe("Cradle", () => {
         babyPresent: "true" as never,
         mode: false as never,
         actuator: { on: "true" as never, amplitude: "0x10" },
+        bounceLevel: 5,
+        maxBounceLimit: 101,
         music: { volume: "1e2" },
+        musicLevel: -1,
+        maxVolumeLimit: 1.5,
         light: { lightIntensity: " " },
         deviceStatus: { batteryLife: {} as never, charging: "yes" as never },
       },
@@ -385,7 +397,11 @@ describe("Cradle", () => {
     expect(malformed.cradleMode).toBeUndefined();
     expect(malformed.bouncing).toBeUndefined();
     expect(malformed.bounceAmplitude).toBeUndefined();
+    expect(malformed.bounceIntensityLevel).toBeUndefined();
+    expect(malformed.maxBouncePercent).toBeUndefined();
     expect(malformed.musicVolume).toBeUndefined();
+    expect(malformed.musicIntensityLevel).toBeUndefined();
+    expect(malformed.maxMusicPercent).toBeUndefined();
     expect(malformed.lightIntensity).toBeUndefined();
     expect(malformed.batteryLife).toBeUndefined();
     expect(malformed.charging).toBeUndefined();

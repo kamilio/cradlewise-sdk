@@ -1316,3 +1316,11 @@ This is the running record of changes, evidence, findings, unresolved issues, an
 - Externalized `mqtt` from the browser-conditioned generated authentication bundle so Homey loads MQTT's Node.js mutual-TLS transport instead of its browser WebSocket transport.
 - Verified the exact generated Homey runtime against the real crib by reading control state and changing bounce intensity, then stopped and unlocked the crib.
 - Added a sanitized app settings diagnostics page with report generation, copy, reset, aggregate control/connection/sleep counters, and a bounded recent-event ring.
+
+## 2026-07-06 — Native dynamic soothing levels
+
+- Re-inspected Android 2.57.8 and corrected the Homey control model: the dashboard uses Off plus visible levels 1–5, encoded as `-1` for Off in the UI and shadow indices 0–4 in `bounceLevel` and `musicLevel`.
+- Added separate maximum-bounce and maximum-sound percentage capabilities backed by `maxBounceLimit` and `maxVolumeLimit`; the crib's reported level recipes perform the dynamic mapping beneath those maximums.
+- Preserved the SDK's low-level 0–99 amplitude and volume operations while adding native-level controller methods for Homey and Flows.
+- Removed confirmation polling from rapid level and maximum updates. Homey now publishes one accepted shadow update and projects the requested state immediately, avoiding repeated-control timeouts.
+- Defined Homey's On behavior: reuse the saved Off/1–5 selections, start only selected channels, and use level 1 for both only when both saved selections are Off.
