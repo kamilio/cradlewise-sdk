@@ -76,7 +76,7 @@
     "@aws-crypto/sha256-js": "5.2.0",
     "@aws-sdk/client-cognito-identity": "3.1079.0",
     "@aws-sdk/client-cognito-identity-provider": "3.1079.0",
-    "@smithy/protocol-http": "5.5.6",
+    "@smithy/protocol-http": "5.5.7",
     "@smithy/signature-v4": "5.6.2",
     "cognito-srp-helper": "2.3.5",
     "mqtt": "5.15.2"
