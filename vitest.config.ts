@@ -13,7 +13,6 @@ export default defineConfig({
         "src/config.ts",
         "src/errors.ts",
         "src/models.ts",
-        "src/realtime.ts",
         "src/text-utils.ts",
         "src/zip-utils.ts",
       ],

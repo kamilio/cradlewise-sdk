@@ -29,18 +29,9 @@ export {
   CradlewiseRealtimeError,
 } from "./errors.js";
 export { Cradle, SleepAnalytics } from "./models.js";
-export {
-  CradlewiseRealtime,
-  isLegacyRealtimeSdkAvailable,
-  isRealtimeAvailable,
-} from "./realtime.js";
 export { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 export type { CradlewiseAuthOptions } from "./auth.js";
 export type { GetAppConfigOptions } from "./config.js";
 export type { CradlewiseApiErrorOptions } from "./errors.js";
 export type { CradleData, CradleOptions } from "./models.js";
-export type {
-  CradlewiseRealtimeEventMap,
-  CradlewiseRealtimeOptions,
-} from "./realtime.js";
 export type * from "./types.js";

@@ -4,6 +4,14 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added
+
+- Add a CLI `--oauth` option that interactively prompts for the Cradlewise account email and a masked password, then uses them as the command's in-memory login credentials without persisting them.
+
+### Removed
+
+- Remove the research-only legacy AWS IoT IAM WebSocket transport (`CradlewiseRealtime`, `isRealtimeAvailable`, `isLegacyRealtimeSdkAvailable`, `allowLegacyIamAuthentication`) and its optional `aws-iot-device-sdk-v2` peer dependency. It was never compatible with the current mobile app's certificate-based mTLS protocol, which `CradlewiseController` already implements; REST polling remains the supported telemetry path. This is a breaking change for any caller importing the removed exports.
+
 ### Changed
 
 - Upgrade Toolcraft to 0.0.109, remove the resolved direct Toolcraft Schema workaround, add a cancellable CLI/SDK/MCP `watch` stream for bounded REST status snapshots, and isolate the temporary AJV 8 compatibility dependency inside the optional Toolcraft boundary.

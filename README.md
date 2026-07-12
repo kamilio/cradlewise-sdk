@@ -1,6 +1,6 @@
 # cradlewise
 
-Unofficial, strongly typed Node.js client for the Cradlewise smart crib API. It supports Cognito SRP authentication, signed REST requests, crib discovery and state, sleep analytics, and Toolcraft-powered CLI/MCP access. A research-only legacy AWS IoT IAM transport is included but disabled by default because it is not compatible with the current mobile app's certificate-based realtime protocol.
+Unofficial, strongly typed Node.js client for the Cradlewise smart crib API. It supports Cognito SRP authentication, signed REST requests, crib discovery and state, sleep analytics, crib controls over the current app's certificate-based mTLS protocol, and Toolcraft-powered CLI/MCP access.
 
 > [!IMPORTANT]
 > This project is not affiliated with or endorsed by Cradlewise. It uses private app APIs that may change without notice. Start with read-only use and never rely on it for safety-critical monitoring.
@@ -71,7 +71,7 @@ An explicit API base URL must use `backend.cradlewise.com` or an AWS API Gateway
 
 Credentials are held in memory only. `ensureValid()` coalesces concurrent login attempts and automatically reauthenticates before the Cognito or temporary AWS credentials expire. Authentication has a 30-second total timeout by default; set `authenticationTimeoutMs` on `CradlewiseAuth` when a verified environment needs another bound. The deadline is enforced even when a custom Cognito adapter ignores its abort signal. Email, password, challenge, token, and temporary-credential material also has conservative byte bounds before expensive cryptography or SDK handoff. `clearCredentials()` aborts any authentication exchange still in flight. Returned credential objects are independent snapshots, so caller mutation cannot corrupt the authentication client's internal validity state.
 
-Public options and adapter results are read once into validated snapshots before use. This includes authentication challenges and credentials, REST request/query values and response metadata, sleep-query options, model inputs, and realtime credentials, so getters cannot change a trusted value between validation and execution. Outgoing JSON rejects non-finite numbers rather than silently converting them to `null`.
+Public options and adapter results are read once into validated snapshots before use. This includes authentication challenges and credentials, REST request/query values and response metadata, sleep-query options, and model inputs, so getters cannot change a trusted value between validation and execution. Outgoing JSON rejects non-finite numbers rather than silently converting them to `null`.
 
 ## REST API
 
@@ -116,43 +116,11 @@ Android bundle findings used to maintain configuration discovery and the read-on
 
 `CradlewiseClient.getUserDeviceIds(babyId)` reads existing registered app-device identifiers for the signed-in account without provisioning a new device and prefers the most recently connected registration when that metadata is available. `getInboxMessages(cradleId, babyId)` uses those identifiers to read the bounded saved-notification feed discovered in the Android app, retrying a different current identifier only when the API explicitly rejects one as stale. `getLatestCribPhoto(cradleId, babyId)` selects the latest usable presentation image, thumbnail, or image content URL. These methods retrieve saved media metadata; they do not expose a live crib camera stream or mutate the account.
 
-## Legacy realtime research transport
+## Realtime crib control
 
-The legacy transport is excluded from default installs. Install its optional peer only when deliberately testing a verified legacy account:
+The current Android app provisions a per-device private key and certificate, then connects to the crib's AWS IoT shadow with mutual TLS. `CradlewiseController` implements that verified protocol for explicit control operations. REST polling remains the supported telemetry path; see `docs/realtime-and-toolcraft.md` and `docs/android-bundle-notes.md`.
 
-```sh
-npm install aws-iot-device-sdk-v2
-```
-
-```ts
-import { CradlewiseRealtime } from "cradlewise";
-
-const realtime = new CradlewiseRealtime({
-  auth,
-  client,
-  cradleIds: cradles.keys(),
-  allowLegacyIamAuthentication: true,
-  onStateUpdate: () => console.log("Received a crib state update"),
-});
-
-realtime.on("error", (error) => console.error("Realtime error", error.message));
-realtime.on("messageError", (error) =>
-  console.error(
-    "Realtime message error",
-    error instanceof Error ? error.message : "Unknown error",
-  ),
-);
-await realtime.connect();
-
-// Later:
-await realtime.disconnect();
-```
-
-The current Android app provisions a per-device private key and certificate, then connects to the crib's AWS IoT shadow with mutual TLS. `CradlewiseController` implements that verified protocol for explicit control operations. The included IAM WebSocket transport remains available only for legacy protocol research and is disabled unless `allowLegacyIamAuthentication: true` is supplied. REST polling remains the supported telemetry path. See `docs/realtime-and-toolcraft.md` and `docs/android-bundle-notes.md`.
-
-`isRealtimeAvailable()` therefore returns `false` for the current supported protocol. `isLegacyRealtimeSdkAvailable()` only reports whether the optional legacy AWS IoT SDK is installed.
-
-Realtime listeners are typed through the exported `CradlewiseRealtimeEventMap`. Serialized crib snapshots use the exported `CradleData` interface, while `Cradle.toJSON()` continues to return a defensive copy.
+Serialized crib snapshots use the exported `CradleData` interface, while `Cradle.toJSON()` continues to return a defensive copy.
 
 ## CLI and MCP
 
@@ -214,7 +182,7 @@ for await (const snapshot of stream) {
 
 Toolcraft commands publish explicit crib and analytics output schemas for CLI, SDK, and MCP consumers. Extensible state and event payloads remain JSON-typed because the private service can add fields independently of this package.
 
-`watch` is a lifecycle-aware Toolcraft stream exposed through CLI, SDK, and MCP. It emits an immediate bounded REST snapshot, continues at a 15–300 second polling interval, uses pull-based delivery, and stops cleanly when its SDK consumer, CLI process, or MCP subscription cancels. It deliberately does not use the incompatible legacy IAM MQTT transport.
+`watch` is a lifecycle-aware Toolcraft stream exposed through CLI, SDK, and MCP. It emits an immediate bounded REST snapshot, continues at a 15–300 second polling interval, uses pull-based delivery, and stops cleanly when its SDK consumer, CLI process, or MCP subscription cancels.
 
 ## Error handling
 

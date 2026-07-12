@@ -13,13 +13,11 @@ try {
     `import {
   AppConfig,
   CradlewiseClient,
-  CradlewiseRealtime,
   isTrustedDiscoveredAppConfig,
   type BabyProfile,
   type CradlePhoto,
   type CradleData,
   type CradlewiseApiErrorOptions,
-  type CradlewiseRealtimeEventMap,
   type InboxBooleanGroups,
   type InboxMessagesResponse,
   type InboxTagGroups,
@@ -27,7 +25,6 @@ try {
 } from "@kamilio/cradlewise-sdk";
 import { cradlewiseToolcraftRoot } from "@kamilio/cradlewise-sdk/toolcraft";
 
-declare const realtime: CradlewiseRealtime;
 declare const client: CradlewiseClient;
 declare const appConfig: AppConfig;
 const profile: BabyProfile = { baby_id: "baby" };
@@ -39,7 +36,6 @@ const cradle: CradleData = {
   unavailableStatusSources: [],
 };
 const options: CradlewiseApiErrorOptions = { status: 503 };
-const event: CradlewiseRealtimeEventMap["state"] = ["crib", {}, "topic"];
 const deviceIds: Promise<string[]> = client.getUserDeviceIds("baby");
 const inbox: Promise<InboxMessagesResponse> = client.getInboxMessages(
   "crib",
@@ -61,18 +57,9 @@ const photo: Promise<CradlePhoto | undefined> = client.getLatestCribPhoto(
   "crib",
   "baby",
 );
-realtime.on("state", (cradleId, state, topic) => {
-  cradleId.toUpperCase();
-  Object.keys(state);
-  topic.toUpperCase();
-});
-realtime.on("error", (error) => error.message);
-// @ts-expect-error unknown realtime event
-realtime.on("unknown", () => undefined);
 void profile;
 void cradle;
 void options;
-void event;
 void deviceIds;
 void inbox;
 void redDots;

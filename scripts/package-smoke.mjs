@@ -17,8 +17,6 @@ import { forwardCommandSignals, terminateCommand } from "./command-process.mjs";
 import {
   PACKAGE_VERSION,
   CradlewiseClient,
-  isLegacyRealtimeSdkAvailable,
-  isRealtimeAvailable,
   isApiBaseUrlForRegion,
   isAwsIotEndpointForRegion,
   parseEventTime,
@@ -53,10 +51,6 @@ if (
   throw new Error("IoT endpoint validator export is not loadable");
 if (cradlewiseToolcraftRoot.name !== "cradlewise")
   throw new Error("Toolcraft root name drifted");
-if (await isRealtimeAvailable())
-  throw new Error("Unsupported current realtime was reported as available");
-if (!(await isLegacyRealtimeSdkAvailable()))
-  throw new Error("Installed optional legacy realtime SDK was not detected");
 
 for (const filename of readdirSync("dist").filter((entry) =>
   entry.endsWith(".map"),
