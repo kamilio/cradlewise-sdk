@@ -6,7 +6,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
-- Add a CLI `--oauth` option that interactively prompts for the Cradlewise account email and a masked password, then uses them as the command's in-memory login credentials without persisting them.
+- Add a CLI `--oauth` option that prints a temporary one-time LAN login URL, accepts the Cradlewise email and password through a browser form, and uses them as the command's in-memory credentials without persisting them.
 
 ### Removed
 

@@ -1,19 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import { prepareOAuthCLI, promptLine } from "../src/cli-oauth.js";
+import {
+  prepareOAuthCLI,
+  startBrowserCredentialLogin,
+} from "../src/cli-oauth.js";
 
-describe("CLI OAuth credential prompt", () => {
-  it("prompts for an email and masked password and exposes them as command secrets", async () => {
-    const prompt = vi
-      .fn<(label: string, secret?: boolean) => Promise<string>>()
-      .mockResolvedValueOnce(" parent@example.com ")
-      .mockResolvedValueOnce("correct horse battery staple");
-
+describe("CLI OAuth browser login", () => {
+  it("uses browser-submitted credentials as command secrets", async () => {
+    const browserLogin = vi.fn().mockResolvedValue({
+      email: "parent@example.com",
+      password: "correct horse battery staple",
+    });
     const prepared = await prepareOAuthCLI({
       argv: ["status", "--oauth", "--output", "json"],
       env: { EXISTING: "value" },
-      prompt,
+      browserLogin,
     });
-
     expect(prepared).toEqual({
       argv: ["status", "--output", "json"],
       env: {
@@ -23,78 +24,99 @@ describe("CLI OAuth credential prompt", () => {
       },
       oauth: true,
     });
-    expect(prompt).toHaveBeenNthCalledWith(1, "Cradlewise account email: ");
-    expect(prompt).toHaveBeenNthCalledWith(
-      2,
-      "Cradlewise account password: ",
-      true,
-    );
+    expect(browserLogin).toHaveBeenCalledOnce();
+  });
+
+  it("serves a one-time login URL and receives its form", async () => {
+    let loginUrl: URL | undefined;
+    const login = startBrowserCredentialLogin({
+      bindHost: "127.0.0.1",
+      publicHost: "127.0.0.1",
+      timeoutMs: 5_000,
+      token: "test_token_1234567890",
+      onUrl: (url) => {
+        loginUrl = url;
+      },
+    });
+    await vi.waitFor(() => expect(loginUrl).toBeInstanceOf(URL));
+    const url = loginUrl as unknown as URL;
+    const page = await fetch(url);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Sign in to Cradlewise");
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        email: " parent@example.com ",
+        password: "browser-password",
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Login received");
+    await expect(login).resolves.toEqual({
+      email: "parent@example.com",
+      password: "browser-password",
+    });
+  });
+
+  it("rejects unknown paths, invalid forms, and expired login attempts", async () => {
+    let loginUrl: URL | undefined;
+    const login = startBrowserCredentialLogin({
+      bindHost: "127.0.0.1",
+      publicHost: "127.0.0.1",
+      timeoutMs: 150,
+      token: "test_token_1234567890",
+      onUrl: (url) => {
+        loginUrl = url;
+      },
+    });
+    await vi.waitFor(() => expect(loginUrl).toBeInstanceOf(URL));
+    const url = loginUrl as unknown as URL;
+    expect(await fetch(new URL("/wrong", url))).toMatchObject({ status: 404 });
+    expect(
+      await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "email=parent%40example.com",
+      }),
+    ).toMatchObject({ status: 400 });
+    await expect(login).rejects.toThrow("timed out");
   });
 
   it("leaves environment authentication unchanged without --oauth", async () => {
-    const prompt = vi.fn();
+    const browserLogin = vi.fn();
     const prepared = await prepareOAuthCLI({
       argv: ["list"],
       env: {
         CRADLEWISE_LOGIN: "configured@example.com",
         CRADLEWISE_PASSWORD: "configured-password",
       },
-      prompt,
+      browserLogin,
     });
     expect(prepared.oauth).toBe(false);
     expect(prepared.argv).toEqual(["list"]);
     expect(prepared.env.CRADLEWISE_LOGIN).toBe("configured@example.com");
-    expect(prompt).not.toHaveBeenCalled();
+    expect(browserLogin).not.toHaveBeenCalled();
   });
 
-  it("does not prompt for informational commands", async () => {
-    const prompt = vi.fn();
+  it("does not start browser login for informational commands", async () => {
+    const browserLogin = vi.fn();
     const prepared = await prepareOAuthCLI({
       argv: ["status", "--oauth", "--help"],
       env: {},
-      prompt,
+      browserLogin,
     });
     expect(prepared).toEqual({
       argv: ["status", "--help"],
       env: {},
       oauth: true,
     });
-    expect(prompt).not.toHaveBeenCalled();
+    expect(browserLogin).not.toHaveBeenCalled();
   });
 
-  it("rejects duplicate flags and empty prompted credentials", async () => {
+  it("rejects duplicate flags", async () => {
     await expect(
       prepareOAuthCLI({ argv: ["list", "--oauth", "--oauth"], env: {} }),
     ).rejects.toThrow("only be specified once");
-    await expect(
-      prepareOAuthCLI({
-        argv: ["list", "--oauth"],
-        env: {},
-        prompt: () => Promise.resolve(" "),
-      }),
-    ).rejects.toThrow("email is required");
-    await expect(
-      prepareOAuthCLI({
-        argv: ["list", "--oauth"],
-        env: {},
-        prompt: vi
-          .fn<(label: string, secret?: boolean) => Promise<string>>()
-          .mockResolvedValueOnce("parent@example.com")
-          .mockResolvedValueOnce(""),
-      }),
-    ).rejects.toThrow("password is required");
-  });
-
-  it("requires a TTY before reading a credential", async () => {
-    await expect(
-      promptLine("Password: ", true, {
-        input: { isTTY: false } as unknown as NodeJS.ReadableStream & {
-          isTTY: boolean;
-        },
-        output: { isTTY: true } as unknown as NodeJS.WritableStream & {
-          isTTY: boolean;
-        },
-      }),
-    ).rejects.toThrow("interactive terminal");
   });
 });

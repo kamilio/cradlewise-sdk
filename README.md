@@ -153,14 +153,23 @@ discovery order when the account has several. Pass an explicit ID to override
 that selection. `status` and `watch` continue to operate on every paired crib
 when no ID is supplied.
 
-For an interactive one-command login, pass `--oauth`. This OAuth-style bridge
-prompts for the account email and masks the password, then supplies both to the
-command exactly as if `CRADLEWISE_LOGIN` and `CRADLEWISE_PASSWORD` had been set.
-The credentials remain in that process only and are not stored:
+For OpenClaw, Hermes, or another client running on a different computer, pass
+`--oauth`. The CLI starts a temporary server on the local network, prints a
+one-time URL, and waits up to five minutes. Open that URL in your browser and
+submit the Cradlewise email and password form. The waiting command receives the
+credentials exactly as if `CRADLEWISE_LOGIN` and `CRADLEWISE_PASSWORD` had been
+set; they remain in that process only and are not stored:
 
 ```sh
 npx @kamilio/cradlewise-sdk status --oauth
 ```
+
+The URL uses the first non-internal IPv4 address detected on the CLI host. Set
+`CRADLEWISE_OAUTH_PUBLIC_HOST` when the browser must use another LAN hostname or
+address. Set `CRADLEWISE_OAUTH_BIND_HOST` or `CRADLEWISE_OAUTH_PORT` only when
+the listening interface or port must be fixed. The form uses plain HTTP on the
+local network, protected by an unguessable one-time path; use only a trusted
+network or put the endpoint behind a private encrypted tunnel.
 
 Use the environment variables shown above for scripts and other non-interactive
 sessions.

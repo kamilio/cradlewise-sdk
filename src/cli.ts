@@ -29,7 +29,7 @@ if (process.argv[2] === "mcp") {
     prepared.argv.some((argument) => argument === "--help" || argument === "-h")
   ) {
     process.stdout.write(
-      `\n${OAUTH_FLAG}  Prompt for the Cradlewise account email and password for this command\n`,
+      `\n${OAUTH_FLAG}  Print a temporary LAN login URL and wait for account credentials\n`,
     );
   }
   await runCLI(cradlewiseToolcraftRoot, {
