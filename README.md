@@ -134,8 +134,7 @@ export CRADLEWISE_PASSWORD='...'
 
 npx @kamilio/cradlewise-sdk list
 npx @kamilio/cradlewise-sdk status
-npx @kamilio/cradlewise-sdk status --cradle-id CRIB_ID --output json
-npx @kamilio/cradlewise-sdk watch --cradle-id CRIB_ID --interval-seconds 30 --output ndjson
+npx @kamilio/cradlewise-sdk watch --interval-seconds 30 --output ndjson
 npx @kamilio/cradlewise-sdk analytics --start-date 2026-06-01T00:00:00Z --end-date 2026-06-08T00:00:00Z --output json
 npx @kamilio/cradlewise-sdk sleep-insights --output json
 npx @kamilio/cradlewise-sdk control-status --output json
@@ -147,11 +146,10 @@ npx @kamilio/cradlewise-sdk unlock
 npx @kamilio/cradlewise-sdk refresh-config
 ```
 
-`--cradle-id` is optional for analytics and control commands. When omitted, the
-CLI uses the only paired crib, or the last (newest) crib in the service's
-discovery order when the account has several. Pass an explicit ID to override
-that selection. `status` and `watch` continue to operate on every paired crib
-when no ID is supplied.
+Every crib-targeting command accepts `--cradle-id ID` as an optional override.
+Without it, analytics and control commands use the only paired crib or the last
+(newest) crib in the service's discovery order; `status` and `watch` operate on
+every paired crib.
 
 For OpenClaw, Hermes, or another client running on a different computer, pass
 `--oauth`. The CLI starts a temporary server on the local network, prints a
@@ -189,7 +187,7 @@ import { cradlewiseToolcraftRoot } from "@kamilio/cradlewise-sdk/toolcraft";
 const sdk = createSDK(cradlewiseToolcraftRoot);
 const result = await sdk.list({});
 
-const stream = sdk.watch({ cradleId: "CRIB_ID", intervalSeconds: 30 });
+const stream = sdk.watch({ intervalSeconds: 30 });
 for await (const snapshot of stream) {
   console.log(snapshot.cradles);
 }
