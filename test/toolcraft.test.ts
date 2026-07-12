@@ -18,6 +18,7 @@ vi.mock("../src/config.js", async (importOriginal) => {
 
 import { AppConfig } from "../src/config.js";
 import { CradlewiseClient } from "../src/client.js";
+import { CradlewiseController } from "../src/controls.js";
 import { Cradle } from "../src/models.js";
 import { cradlewiseToolcraftRoot } from "../src/toolcraft.js";
 
@@ -96,6 +97,100 @@ describe("Toolcraft commands", () => {
     await expect(iterator.next()).resolves.toMatchObject({ done: true });
     discover.mockRestore();
     update.mockRestore();
+  });
+
+  it("uses the only or newest discovered crib when cradleId is omitted", async () => {
+    mocks.getAppConfig.mockResolvedValue(
+      new AppConfig({
+        cognitoUserPoolId: "pool",
+        cognitoAppClientId: "client",
+        cognitoAppClientSecret: "secret",
+        cognitoIdentityPoolId: "identity",
+        cognitoRegion: "us-east-1",
+        apiBaseUrl: "https://backend.cradlewise.com",
+      }),
+    );
+    const older = new Cradle({ cradleId: "older", babyId: "baby-older" });
+    const newest = new Cradle({ cradleId: "newest", babyId: "baby-newest" });
+    const discover = vi
+      .spyOn(CradlewiseClient.prototype, "discoverCradles")
+      .mockResolvedValue(
+        new Map([
+          [older.cradleId, older],
+          [newest.cradleId, newest],
+        ]),
+      );
+    const fetchAnalytics = vi
+      .spyOn(CradlewiseClient.prototype, "fetchSleepAnalytics")
+      .mockResolvedValue({
+        toJSON: () => ({
+          totalSleepMinutes: 0,
+          totalAwakeMinutes: 0,
+          totalSootheCount: 0,
+          napCount: 0,
+          longestNapMinutes: 0,
+          events: [],
+          partial: false,
+          unavailableSources: [],
+        }),
+      } as never);
+    const getState = vi
+      .spyOn(CradlewiseController.prototype, "getState")
+      .mockResolvedValue({} as never);
+    const disconnect = vi
+      .spyOn(CradlewiseController.prototype, "disconnect")
+      .mockResolvedValue();
+    const sdk = createSDK(cradlewiseToolcraftRoot, {
+      env: {
+        CRADLEWISE_LOGIN: "parent@example.com",
+        CRADLEWISE_PASSWORD: "password",
+      },
+    });
+
+    try {
+      await expect(sdk.analytics({})).resolves.toMatchObject({
+        cradleId: "newest",
+      });
+      await expect(sdk.controlStatus({})).resolves.toMatchObject({
+        cradleId: "newest",
+      });
+      expect(fetchAnalytics).toHaveBeenCalledWith(newest, expect.any(Object));
+      expect(getState).toHaveBeenCalledOnce();
+    } finally {
+      discover.mockRestore();
+      fetchAnalytics.mockRestore();
+      getState.mockRestore();
+      disconnect.mockRestore();
+    }
+  });
+
+  it("reports an account with no paired crib when implicit selection is impossible", async () => {
+    mocks.getAppConfig.mockResolvedValue(
+      new AppConfig({
+        cognitoUserPoolId: "pool",
+        cognitoAppClientId: "client",
+        cognitoAppClientSecret: "secret",
+        cognitoIdentityPoolId: "identity",
+        cognitoRegion: "us-east-1",
+        apiBaseUrl: "https://backend.cradlewise.com",
+      }),
+    );
+    const discover = vi
+      .spyOn(CradlewiseClient.prototype, "discoverCradles")
+      .mockResolvedValue(new Map());
+    const sdk = createSDK(cradlewiseToolcraftRoot, {
+      env: {
+        CRADLEWISE_LOGIN: "parent@example.com",
+        CRADLEWISE_PASSWORD: "password",
+      },
+    });
+    try {
+      await expect(sdk.analytics({})).rejects.toThrow(
+        "No crib is paired with this account",
+      );
+    } finally {
+      discover.mockRestore();
+    }
   });
 
   it("rejects malformed command inputs before loading configuration", async () => {

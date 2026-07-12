@@ -14,6 +14,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Make `--cradle-id` optional for analytics and crib-control CLI commands, defaulting to the only discovered crib or the newest crib in service discovery order.
+
 - Upgrade Toolcraft to 0.0.109, remove the resolved direct Toolcraft Schema workaround, add a cancellable CLI/SDK/MCP `watch` stream for bounded REST status snapshots, and isolate the temporary AJV 8 compatibility dependency inside the optional Toolcraft boundary.
 - Harden date reads against mutation of `Function.prototype.call` and `Date.prototype.getTime` after module initialization.
 - Terminate POSIX validation, reproducibility, staging, and SDK-vendoring subprocess groups on timeout or output overflow so inherited descendants cannot survive a failed command.

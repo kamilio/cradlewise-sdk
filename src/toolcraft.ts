@@ -159,11 +159,7 @@ const analytics = defineCommand({
   aliases: ["sleep-insights"],
   description: "Fetch aggregated sleep analytics for a crib",
   params: S.Object({
-    cradleId: S.String({
-      description: "Crib ID",
-      minLength: 1,
-      maxLength: 256,
-    }),
+    cradleId: S.Optional(cradleIdParam()),
     startHour: S.Optional(
       S.Number({
         description: "Analytics day start hour",
@@ -192,7 +188,7 @@ const analytics = defineCommand({
   secrets,
   scope: ["cli", "mcp", "sdk"],
   handler: async ({ params, secrets: credentials }) => {
-    const cradleId = requireCradleId(params.cradleId);
+    const cradleId = optionalCradleId(params.cradleId);
     const startHour = optionalStartHour(params.startHour);
     const startDate = optionalApiDate(params.startDate, "startDate");
     const endDate = optionalApiDate(params.endDate, "endDate");
@@ -201,8 +197,7 @@ const analytics = defineCommand({
     }
     const client = await createClient(credentials.email, credentials.password);
     const cradles = await client.discoverCradles();
-    const cradle = selectCradles(cradles, cradleId)[0];
-    if (!cradle) throw new UserError(`Crib ${cradleId} was not discovered`);
+    const cradle = selectCradle(cradles, cradleId);
     const value = await client.fetchSleepAnalytics(cradle, {
       ...(startHour === undefined ? {} : { startHour }),
       ...(startDate === undefined ? {} : { startDate }),
@@ -219,7 +214,7 @@ const controlStatus = defineCommand({
   name: "control-status",
   description: "Read the crib's current bounce, audio, and Smart-lock controls",
   params: S.Object({
-    cradleId: S.String({ minLength: 1, maxLength: 256 }),
+    cradleId: S.Optional(cradleIdParam()),
   }),
   result: S.Object({ cradleId: S.String(), state: controlStateResult }),
   secrets,
@@ -240,7 +235,7 @@ const startSoothing = defineCommand({
   description:
     "Start the crib at exact bounce and audio levels, optionally locking Smart mode",
   params: S.Object({
-    cradleId: S.String({ minLength: 1, maxLength: 256 }),
+    cradleId: S.Optional(cradleIdParam()),
     bounceLevel: S.Number({
       description: "Bounce amplitude from 0 through 99",
       jsonType: "integer",
@@ -286,7 +281,7 @@ const startSoothing = defineCommand({
 const stopSoothing = defineCommand({
   name: "stop",
   description: "Stop both crib bounce and audio",
-  params: S.Object({ cradleId: S.String({ minLength: 1, maxLength: 256 }) }),
+  params: S.Object({ cradleId: S.Optional(cradleIdParam()) }),
   result: S.Object({ cradleId: S.String(), state: controlStateResult }),
   secrets,
   scope: ["cli", "sdk"],
@@ -305,7 +300,7 @@ const lockControls = defineCommand({
   name: "lock",
   description: "Lock Smart mode at the current settings",
   params: S.Object({
-    cradleId: S.String({ minLength: 1, maxLength: 256 }),
+    cradleId: S.Optional(cradleIdParam()),
     minutes: S.Number({
       jsonType: "integer",
       minimum: 1,
@@ -330,7 +325,7 @@ const lockControls = defineCommand({
 const unlockControls = defineCommand({
   name: "unlock",
   description: "Unlock Smart mode",
-  params: S.Object({ cradleId: S.String({ minLength: 1, maxLength: 256 }) }),
+  params: S.Object({ cradleId: S.Optional(cradleIdParam()) }),
   result: S.Object({ cradleId: S.String(), state: controlStateResult }),
   secrets,
   scope: ["cli", "sdk"],
@@ -422,17 +417,29 @@ async function withController<T>(
   requestedCradleId: unknown,
   operation: (controller: CradlewiseController, cradle: Cradle) => Promise<T>,
 ): Promise<T> {
-  const cradleId = requireCradleId(requestedCradleId);
+  const cradleId = optionalCradleId(requestedCradleId);
   const client = await createClient(credentials.email, credentials.password);
   const cradles = await client.discoverCradles();
-  const cradle = selectCradles(cradles, cradleId)[0];
-  if (!cradle) throw new UserError(`Crib ${cradleId} was not discovered`);
+  const cradle = selectCradle(cradles, cradleId);
   const controller = new CradlewiseController(client.auth, cradle);
   try {
     return boundedResult(await operation(controller, cradle));
   } finally {
     await controller.disconnect();
   }
+}
+
+function selectCradle(cradles: Map<string, Cradle>, cradleId?: string): Cradle {
+  if (cradleId !== undefined) {
+    const selected = cradles.get(cradleId);
+    if (!selected)
+      throw new UserError(`Crib ${cradleId} is not paired with this account`);
+    return selected;
+  }
+  const discovered = [...cradles.values()];
+  const newest = discovered.at(-1);
+  if (!newest) throw new UserError("No crib is paired with this account");
+  return newest;
 }
 
 function selectCradles(
@@ -477,6 +484,15 @@ function serializeCradles(cradles: Iterable<Cradle>): CradleData[] {
 
 function optionalCradleId(value: unknown): string | undefined {
   return value === undefined ? undefined : requireCradleId(value);
+}
+
+function cradleIdParam() {
+  return S.String({
+    description:
+      "Crib ID; omit to use the only crib or the newest crib returned by discovery",
+    minLength: 1,
+    maxLength: 256,
+  });
 }
 
 function requireCradleId(value: unknown): string {

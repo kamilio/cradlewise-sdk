@@ -132,20 +132,26 @@ Toolcraft is a default-installed optional dependency so core-only environments s
 export CRADLEWISE_LOGIN=parent@example.com
 export CRADLEWISE_PASSWORD='...'
 
-npx cradlewise list
-npx cradlewise status
-npx cradlewise status --cradle-id CRIB_ID --output json
-npx cradlewise watch --cradle-id CRIB_ID --interval-seconds 30 --output ndjson
-npx cradlewise analytics --cradle-id CRIB_ID --start-date 2026-06-01T00:00:00Z --end-date 2026-06-08T00:00:00Z --output json
-npx cradlewise sleep-insights --cradle-id CRIB_ID --output json
-npx cradlewise control-status --cradle-id CRIB_ID --output json
-npx cradlewise start --cradle-id CRIB_ID --bounce-level 25 --sound-level 15
-npx cradlewise start --cradle-id CRIB_ID --bounce-level 25 --sound-level 15 --lock-minutes 30
-npx cradlewise stop --cradle-id CRIB_ID
-npx cradlewise lock --cradle-id CRIB_ID --minutes 30
-npx cradlewise unlock --cradle-id CRIB_ID
-npx cradlewise refresh-config
+npx @kamilio/cradlewise-sdk list
+npx @kamilio/cradlewise-sdk status
+npx @kamilio/cradlewise-sdk status --cradle-id CRIB_ID --output json
+npx @kamilio/cradlewise-sdk watch --cradle-id CRIB_ID --interval-seconds 30 --output ndjson
+npx @kamilio/cradlewise-sdk analytics --start-date 2026-06-01T00:00:00Z --end-date 2026-06-08T00:00:00Z --output json
+npx @kamilio/cradlewise-sdk sleep-insights --output json
+npx @kamilio/cradlewise-sdk control-status --output json
+npx @kamilio/cradlewise-sdk start --bounce-level 25 --sound-level 15
+npx @kamilio/cradlewise-sdk start --bounce-level 25 --sound-level 15 --lock-minutes 30
+npx @kamilio/cradlewise-sdk stop
+npx @kamilio/cradlewise-sdk lock --minutes 30
+npx @kamilio/cradlewise-sdk unlock
+npx @kamilio/cradlewise-sdk refresh-config
 ```
+
+`--cradle-id` is optional for analytics and control commands. When omitted, the
+CLI uses the only paired crib, or the last (newest) crib in the service's
+discovery order when the account has several. Pass an explicit ID to override
+that selection. `status` and `watch` continue to operate on every paired crib
+when no ID is supplied.
 
 For an interactive one-command login, pass `--oauth`. This OAuth-style bridge
 prompts for the account email and masks the password, then supplies both to the
@@ -153,7 +159,7 @@ command exactly as if `CRADLEWISE_LOGIN` and `CRADLEWISE_PASSWORD` had been set.
 The credentials remain in that process only and are not stored:
 
 ```sh
-npx cradlewise status --oauth
+npx @kamilio/cradlewise-sdk status --oauth
 ```
 
 Use the environment variables shown above for scripts and other non-interactive
@@ -162,7 +168,7 @@ sessions.
 Run the stdio MCP server with:
 
 ```sh
-npx cradlewise mcp
+npx @kamilio/cradlewise-sdk mcp
 ```
 
 Or import the command tree:
