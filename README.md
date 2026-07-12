@@ -179,6 +179,18 @@ npx cradlewise unlock --cradle-id CRIB_ID
 npx cradlewise refresh-config
 ```
 
+For an interactive one-command login, pass `--oauth`. This OAuth-style bridge
+prompts for the account email and masks the password, then supplies both to the
+command exactly as if `CRADLEWISE_LOGIN` and `CRADLEWISE_PASSWORD` had been set.
+The credentials remain in that process only and are not stored:
+
+```sh
+npx cradlewise status --oauth
+```
+
+Use the environment variables shown above for scripts and other non-interactive
+sessions.
+
 Run the stdio MCP server with:
 
 ```sh
