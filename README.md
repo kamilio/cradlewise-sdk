@@ -108,6 +108,8 @@ Sleep methods default to the preceding seven days. Dates may be `Date` instances
 
 The library calculates nap summaries from event intervals and then prefers server-provided totals where available. Sleep state `4` contributes sleep time, awake state `1` contributes awake time, and stirring/away intervals contribute neither; any non-sleep transition closes an active nap. Event-derived durations and soothe evidence are clipped to both requested range boundaries; a state already active at the lower boundary continues from that boundary without counting earlier elapsed time. When aggregate soothe counts are unavailable, the current `sleep_sessions_saved` event evidence is used. Event/model trees are capped by node, depth, and aggregate text budgets before cloning or aggregation.
 
+A real event exactly at the lower range boundary determines the initial state instead of a synthetic continuation of the preceding event. A wake at that boundary therefore does not add a zero-length nap or last-nap metadata. Earlier sleep still contributes any positive-duration overlap when no event exists at the boundary, including an overlap shorter than one rounded minute.
+
 If exactly one sleep source fails, `fetchSleepAnalytics()` returns the usable fallback with `partial: true` and names the missing source in `unavailableSources`. It throws if both sources fail or if the selected crib has no associated baby identifier. Each request snapshots the crib's baby identifier and timezone, and concurrent calls are generation-ordered so an older result cannot replace a newer cached result.
 
 ## Saved inbox photos

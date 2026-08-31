@@ -113,7 +113,7 @@ export function aggregateSleepAnalytics(
       if (candidate.time >= rangeStartTime) break;
       priorEvent = candidate;
     }
-    if (priorEvent) {
+    if (priorEvent && temporalEvents[0]?.time !== rangeStartTime) {
       temporalEvents = [
         {
           event: {

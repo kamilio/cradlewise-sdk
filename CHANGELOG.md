@@ -223,6 +223,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Prefer real events at the sleep range's lower boundary over synthetic prior state, avoiding an invented zero-length nap when a wake occurs exactly at that boundary while preserving positive-duration carry-in sleep.
+
 - Retain authentication deadlines explicitly instead of composing a temporary `AbortSignal.timeout()` source, preventing ignored-abort Cognito calls from hanging on the minimum supported Node.js 20 runtime.
 
 - Preserved an existing Homey poll timer if creating its replacement fails, and made repair roll stored credentials back when settings persistence or authenticated account verification cannot be completed.
