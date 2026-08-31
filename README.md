@@ -122,6 +122,8 @@ The current Android app provisions a per-device private key and certificate, the
 
 Serialized crib snapshots use the exported `CradleData` interface, while `Cradle.toJSON()` continues to return a defensive copy.
 
+`await controller.disconnect()` cancels previously requested controls, state reads, and connection attempts, including queued controls. It closes an established or late-arriving MQTT connection before resolving; pending callers reject with `CradlewiseRealtimeError`. An already-issued publication cannot be recalled. Explicit calls made after disconnect begins may reuse the controller, but wait for teardown to finish before reconnecting. A custom `mqttConnect` implementation must settle its connection attempt for teardown to finish, and transport-close failures are reported to the caller.
+
 ## CLI and MCP
 
 The package uses [Toolcraft](https://github.com/poe-platform/poe-code/tree/main/packages/toolcraft) to define one read-only command tree for CLI, SDK, and MCP surfaces.

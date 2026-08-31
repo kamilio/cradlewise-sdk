@@ -121,6 +121,9 @@ export class CradlewiseController {
   readonly #fetch: typeof fetch;
   #mqtt: CradlewiseMqttConnection | undefined;
   #connection: Promise<CradlewiseMqttConnection> | undefined;
+  #connectingTransport: Promise<CradlewiseMqttConnection> | undefined;
+  #lifecycle = new AbortController();
+  #disconnecting: Promise<void> | undefined;
   #configuration: Promise<DeviceConfiguration> | undefined;
   #shadowSubscription: Promise<void> | undefined;
   #shadowSubscriptionConnection: CradlewiseMqttConnection | undefined;
@@ -167,21 +170,44 @@ export class CradlewiseController {
   }
 
   async connect(): Promise<void> {
-    await this.#getConnection();
+    await this.#getConnection(this.#lifecycle.signal);
   }
 
   async disconnect(): Promise<void> {
+    const error = new CradlewiseRealtimeError("Crib control connection closed");
+    this.#lifecycle.abort(error);
+    this.#lifecycle = new AbortController();
     const connection = this.#mqtt;
+    const connecting = this.#connectingTransport;
+    const updates = this.#updateQueue;
     this.#mqtt = undefined;
     this.#connection = undefined;
-    this.#resetShadowTransport(
-      new CradlewiseRealtimeError("Crib control connection closed"),
-    );
-    if (connection) await connection.endAsync();
+    this.#connectingTransport = undefined;
+    this.#updateQueue = Promise.resolve();
+    this.#resetShadowTransport(error);
+    const teardown = Promise.all([
+      this.#disconnecting,
+      updates,
+      connection && Promise.resolve().then(() => connection.endAsync()),
+      connecting?.then(
+        (lateConnection) => lateConnection.endAsync(),
+        () => undefined,
+      ),
+    ]).then(() => undefined);
+    this.#disconnecting = teardown;
+    try {
+      await teardown;
+    } finally {
+      if (this.#disconnecting === teardown) this.#disconnecting = undefined;
+    }
   }
 
   async getState(): Promise<CradleControlState> {
-    const state = controlStateFromShadow(await this.#getShadow());
+    const signal = this.#lifecycle.signal;
+    const state = controlStateFromShadow(
+      await this.#shadowRequest("get", {}, signal),
+    );
+    assertActive(signal);
     this.#lastState = state;
     return state;
   }
@@ -361,8 +387,11 @@ export class CradlewiseController {
     desired: JsonObject,
     project: (state: CradleControlState) => CradleControlState,
   ): Promise<CradleControlState> {
+    const signal = this.#lifecycle.signal;
     const update = this.#updateQueue.then(async () => {
-      await this.#shadowRequest("update", { state: { desired } });
+      assertActive(signal);
+      await this.#shadowRequest("update", { state: { desired } }, signal);
+      assertActive(signal);
       const state = project(this.#lastState);
       this.#lastState = state;
       return state;
@@ -374,16 +403,15 @@ export class CradlewiseController {
     return update;
   }
 
-  async #getShadow(): Promise<ShadowDocument> {
-    return this.#shadowRequest("get", {});
-  }
-
   async #shadowRequest(
     operation: "get" | "update",
     body: JsonObject,
+    signal: AbortSignal,
   ): Promise<ShadowDocument> {
-    const connection = await this.#getConnection();
-    await this.#ensureShadowSubscription(connection);
+    const connection = await this.#getConnection(signal);
+    assertActive(signal);
+    await withinLifecycle(signal, this.#ensureShadowSubscription(connection));
+    assertActive(signal);
     const token = `cradlewise-${randomUUID()}`;
     const base = `$aws/things/${this.cradle.cradleId}/shadow/${operation}`;
     const accepted = `${base}/accepted`;
@@ -401,21 +429,24 @@ export class CradlewiseController {
         timeout,
       });
     });
+    void response.catch(() => undefined);
     try {
-      await connection.publishAsync(
-        base,
-        JSON.stringify({ ...body, clientToken: token }),
-        { qos: 0 },
+      await withinLifecycle(
+        signal,
+        connection.publishAsync(
+          base,
+          JSON.stringify({ ...body, clientToken: token }),
+          { qos: 0 },
+        ),
       );
-    } catch (error) {
+      return await withinLifecycle(signal, response);
+    } finally {
       const pending = this.#pendingShadowRequests.get(token);
       if (pending) {
         clearTimeout(pending.timeout);
         this.#pendingShadowRequests.delete(token);
       }
-      throw error;
     }
-    return response;
   }
 
   async #ensureShadowSubscription(
@@ -507,35 +538,48 @@ export class CradlewiseController {
     this.#rejectPendingShadowRequests(error);
   }
 
-  async #getConnection(): Promise<CradlewiseMqttConnection> {
+  async #getConnection(signal: AbortSignal): Promise<CradlewiseMqttConnection> {
+    assertActive(signal);
+    if (this.#disconnecting) await withinLifecycle(signal, this.#disconnecting);
+    assertActive(signal);
     if (this.#mqtt?.connected) return this.#mqtt;
-    this.#connection ??= this.#openConnection().finally(() => {
-      this.#connection = undefined;
-    });
-    return this.#connection;
+    if (!this.#connection) {
+      const connection = this.#openConnection(signal).finally(() => {
+        if (this.#connection === connection) this.#connection = undefined;
+      });
+      this.#connection = connection;
+    }
+    return withinLifecycle(signal, this.#connection);
   }
 
-  async #openConnection(): Promise<CradlewiseMqttConnection> {
-    const [configuration, credentials] = await Promise.all([
-      this.#getDeviceConfiguration(),
-      this.auth.ensureValid(),
-    ]);
-    const [cert, key] = await Promise.all([
-      downloadS3Object(
-        configuration.s3Bucket,
-        configuration.s3ObjectKeys[0],
-        this.auth.appConfig.cognitoRegion,
-        credentials.aws,
-        this.#fetch,
-      ),
-      downloadS3Object(
-        configuration.s3Bucket,
-        configuration.s3ObjectKeys[1],
-        this.auth.appConfig.cognitoRegion,
-        credentials.aws,
-        this.#fetch,
-      ),
-    ]);
+  async #openConnection(
+    signal: AbortSignal,
+  ): Promise<CradlewiseMqttConnection> {
+    const [configuration, credentials] = await withinLifecycle(
+      signal,
+      Promise.all([this.#getDeviceConfiguration(), this.auth.ensureValid()]),
+    );
+    assertActive(signal);
+    const [cert, key] = await withinLifecycle(
+      signal,
+      Promise.all([
+        downloadS3Object(
+          configuration.s3Bucket,
+          configuration.s3ObjectKeys[0],
+          this.auth.appConfig.cognitoRegion,
+          credentials.aws,
+          this.#fetch,
+        ),
+        downloadS3Object(
+          configuration.s3Bucket,
+          configuration.s3ObjectKeys[1],
+          this.auth.appConfig.cognitoRegion,
+          credentials.aws,
+          this.#fetch,
+        ),
+      ]),
+    );
+    assertActive(signal);
     const endpoint = this.auth.appConfig.iotEndpoint;
     if (!endpoint) {
       throw new CradlewiseRealtimeError("Cradlewise IoT is not configured");
@@ -550,11 +594,12 @@ export class CradlewiseController {
       protocolVersion: 4,
       rejectUnauthorized: true,
     };
+    let connecting: Promise<CradlewiseMqttConnection> | undefined;
     try {
-      const connection = await this.#mqttConnect(
-        `mqtts://${endpoint}:8883`,
-        options,
-      );
+      connecting = this.#mqttConnect(`mqtts://${endpoint}:8883`, options);
+      this.#connectingTransport = connecting;
+      const connection = await connecting;
+      assertActive(signal);
       this.#mqtt = connection;
       connection.once("close", () => {
         if (this.#mqtt === connection) {
@@ -566,12 +611,16 @@ export class CradlewiseController {
       });
       return connection;
     } catch (error) {
+      assertActive(signal);
       throw new CradlewiseRealtimeError(
         "Unable to connect to the crib control service",
         {
           cause: error,
         },
       );
+    } finally {
+      if (this.#connectingTransport === connecting)
+        this.#connectingTransport = undefined;
     }
   }
 
@@ -610,6 +659,34 @@ export class CradlewiseController {
     );
     return parseDeviceConfiguration(result, this.cradle.cradleId);
   }
+}
+
+function assertActive(signal: AbortSignal): void {
+  if (signal.aborted) throw signal.reason as Error;
+}
+
+function withinLifecycle<Value>(
+  signal: AbortSignal,
+  promise: Promise<Value>,
+): Promise<Value> {
+  return new Promise<Value>((resolve, reject) => {
+    const cancel = () => {
+      reject(signal.reason as Error);
+    };
+    if (signal.aborted) cancel();
+    else signal.addEventListener("abort", cancel, { once: true });
+    void promise.then(
+      (value) => {
+        signal.removeEventListener("abort", cancel);
+        if (signal.aborted) cancel();
+        else resolve(value);
+      },
+      (error: Error) => {
+        signal.removeEventListener("abort", cancel);
+        reject(error);
+      },
+    );
+  });
 }
 
 function parseDeviceConfiguration(
