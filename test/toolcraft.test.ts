@@ -27,6 +27,55 @@ describe("Toolcraft commands", () => {
     vi.clearAllMocks();
   });
 
+  for (const locked of [true, false]) {
+    it(`preserves partial ${locked ? "lock" : "unlock"} results through the public SDK`, async () => {
+      mocks.getAppConfig.mockResolvedValue(
+        new AppConfig({
+          cognitoUserPoolId: "pool",
+          cognitoAppClientId: "client",
+          cognitoAppClientSecret: "fixture",
+          cognitoIdentityPoolId: "identity",
+          cognitoRegion: "us-east-1",
+          apiBaseUrl: "https://backend.cradlewise.com",
+        }),
+      );
+      const cradle = new Cradle({ cradleId: "crib", babyId: "123" });
+      const state = { locked, ...(locked ? { lockMinutes: 15 } : {}) };
+      const discover = vi
+        .spyOn(CradlewiseClient.prototype, "discoverCradles")
+        .mockResolvedValue(new Map([[cradle.cradleId, cradle]]));
+      const operation = vi
+        .spyOn(CradlewiseController.prototype, locked ? "lock" : "unlock")
+        .mockResolvedValue(state);
+      const disconnect = vi
+        .spyOn(CradlewiseController.prototype, "disconnect")
+        .mockResolvedValue();
+      const ambientFetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockRejectedValue(new Error("Unexpected application request"));
+      try {
+        const sdk = createSDK(cradlewiseToolcraftRoot, {
+          env: {
+            CRADLEWISE_LOGIN: "parent@example.com",
+            CRADLEWISE_PASSWORD: "fixture",
+          },
+        });
+        const result = locked
+          ? await sdk.lock({ minutes: 15 })
+          : await sdk.unlock({});
+        expect(result).toEqual({ cradleId: "crib", state });
+        expect(operation).toHaveBeenCalledOnce();
+        expect(disconnect).toHaveBeenCalledOnce();
+        expect(ambientFetch).not.toHaveBeenCalled();
+      } finally {
+        discover.mockRestore();
+        operation.mockRestore();
+        disconnect.mockRestore();
+        ambientFetch.mockRestore();
+      }
+    });
+  }
+
   it("matches the documented SDK command surface", () => {
     const sdk = createSDK(cradlewiseToolcraftRoot);
     expect(Object.keys(sdk)).toEqual([

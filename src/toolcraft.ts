@@ -70,7 +70,30 @@ const controlStateResult = S.Object({
   soundLevel: S.Number({ jsonType: "integer", minimum: 0, maximum: 99 }),
   locked: S.Boolean(),
   lockMinutes: S.Number({ jsonType: "integer", minimum: 1, maximum: 60 }),
+  bounceIntensityLevel: S.Optional(
+    S.Number({ jsonType: "integer", minimum: 0, maximum: 5 }),
+  ),
+  soundIntensityLevel: S.Optional(
+    S.Number({ jsonType: "integer", minimum: 0, maximum: 5 }),
+  ),
+  maxBouncePercent: S.Optional(
+    S.Number({ jsonType: "integer", minimum: 0, maximum: 100 }),
+  ),
+  maxSoundPercent: S.Optional(
+    S.Number({ jsonType: "integer", minimum: 0, maximum: 100 }),
+  ),
   shadowVersion: S.Optional(S.Number({ jsonType: "integer", minimum: 0 })),
+});
+
+const controlUpdateResult = S.Object({
+  ...controlStateResult.shape,
+  active: S.Optional(controlStateResult.shape.active),
+  bounceOn: S.Optional(controlStateResult.shape.bounceOn),
+  bounceLevel: S.Optional(controlStateResult.shape.bounceLevel),
+  soundOn: S.Optional(controlStateResult.shape.soundOn),
+  soundLevel: S.Optional(controlStateResult.shape.soundLevel),
+  locked: S.Optional(controlStateResult.shape.locked),
+  lockMinutes: S.Optional(controlStateResult.shape.lockMinutes),
 });
 
 const watchEvent = S.Object({ cradles: S.Array(cradleResult) });
@@ -258,7 +281,7 @@ const startSoothing = defineCommand({
       }),
     ),
   }),
-  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  result: S.Object({ cradleId: S.String(), state: controlUpdateResult }),
   secrets,
   scope: ["cli", "sdk"],
   handler: async ({ params, secrets: credentials }) =>
@@ -282,7 +305,7 @@ const stopSoothing = defineCommand({
   name: "stop",
   description: "Stop both crib bounce and audio",
   params: S.Object({ cradleId: S.Optional(cradleIdParam()) }),
-  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  result: S.Object({ cradleId: S.String(), state: controlUpdateResult }),
   secrets,
   scope: ["cli", "sdk"],
   handler: async ({ params, secrets: credentials }) =>
@@ -308,7 +331,7 @@ const lockControls = defineCommand({
       default: 30,
     }),
   }),
-  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  result: S.Object({ cradleId: S.String(), state: controlUpdateResult }),
   secrets,
   scope: ["cli", "sdk"],
   handler: async ({ params, secrets: credentials }) =>
@@ -326,7 +349,7 @@ const unlockControls = defineCommand({
   name: "unlock",
   description: "Unlock Smart mode",
   params: S.Object({ cradleId: S.Optional(cradleIdParam()) }),
-  result: S.Object({ cradleId: S.String(), state: controlStateResult }),
+  result: S.Object({ cradleId: S.String(), state: controlUpdateResult }),
   secrets,
   scope: ["cli", "sdk"],
   handler: async ({ params, secrets: credentials }) =>
