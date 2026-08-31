@@ -1,4 +1,4 @@
-import { EventEmitter } from "node:events";
+import { EventEmitter, getEventListeners } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppConfig } from "../src/config.js";
 import { CradlewiseController } from "../src/controls.js";
@@ -542,6 +542,36 @@ describe("controller response deadlines during publication", () => {
       expect(result).toBe(timeoutResult);
       await expect(controller.lock()).resolves.toMatchObject({ soundLevel: 0 });
       expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      release.resolve();
+      await controller.disconnect();
+      await pending;
+    }
+  });
+
+  it("releases cancellation listeners when the publisher remains pending", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const subscriptions = vi.spyOn(AbortSignal.prototype, "addEventListener");
+    const { controller, entered, release } = fixture("publish");
+    let result: unknown;
+    const pending = outcome(controller.setSoundLevel(10)).then((value) => {
+      result = value;
+    });
+    try {
+      await entered.promise;
+      const signals = new Set(
+        subscriptions.mock.contexts.filter(
+          (signal): signal is AbortSignal => signal instanceof AbortSignal,
+        ),
+      );
+      expect(signals.size).toBeGreaterThan(0);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(result).toMatchObject({
+        error: { message: "Crib control request timed out" },
+      });
+      for (const signal of signals) {
+        expect(getEventListeners(signal, "abort")).toHaveLength(0);
+      }
     } finally {
       release.resolve();
       await controller.disconnect();
