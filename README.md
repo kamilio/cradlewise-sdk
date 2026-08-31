@@ -124,6 +124,8 @@ Serialized crib snapshots use the exported `CradleData` interface, while `Cradle
 
 `await controller.disconnect()` cancels previously requested controls, state reads, and connection attempts, including queued controls. It closes an established or late-arriving MQTT connection before resolving; pending callers reject with `CradlewiseRealtimeError`. An already-issued publication cannot be recalled. Explicit calls made after disconnect begins may reuse the controller, but wait for teardown to finish before reconnecting. A custom `mqttConnect` implementation must settle its connection attempt for teardown to finish, and transport-close failures are reported to the caller.
 
+Response timeouts, rejected responses, and connection closure reach callers even while an MQTT publication is still pending. A failed control releases the update queue; a late publication result or response cannot turn that failure into success or overwrite a later control's cached state. Successful requests still wait for both publication and the matching accepted response. A timeout does not prove that an already-issued command was not applied by the crib.
+
 ## CLI and MCP
 
 The package uses [Toolcraft](https://github.com/poe-platform/poe-code/tree/main/packages/toolcraft) to define one read-only command tree for CLI, SDK, and MCP surfaces.

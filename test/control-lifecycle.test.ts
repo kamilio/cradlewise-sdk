@@ -6,10 +6,12 @@ import { Cradle } from "../src/models.js";
 
 function deferred() {
   let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 type Stage =
@@ -152,7 +154,10 @@ function outcome(promise: Promise<unknown>) {
   );
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("controller disconnect lifecycle", () => {
   for (const stage of [
@@ -401,4 +406,175 @@ describe("controller disconnect lifecycle", () => {
     await expect(controller.connect()).resolves.toBeUndefined();
     await controller.disconnect();
   });
+});
+
+describe("controller response deadlines during publication", () => {
+  for (const operation of ["control", "state"] as const) {
+    for (const failure of ["timeout", "rejection", "close"] as const) {
+      it(`reports ${operation} ${failure} before publication settles`, async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        const { controller, entered, release, connections, published } =
+          fixture("publish");
+        let result: unknown;
+        const pending = outcome(
+          operation === "control"
+            ? controller.setSoundLevel(50)
+            : controller.getState(),
+        ).then((value) => {
+          result = value;
+        });
+        try {
+          await entered.promise;
+          if (failure === "timeout") {
+            await vi.advanceTimersByTimeAsync(1_000);
+          } else if (failure === "rejection") {
+            const { topic, body } = published[0]!;
+            connections[0]!.emit(
+              "message",
+              `${topic}/rejected`,
+              Buffer.from(JSON.stringify(body)),
+            );
+          } else {
+            connections[0]!.emit("close");
+          }
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(result).toMatchObject({
+            error: {
+              name: "CradlewiseRealtimeError",
+              message:
+                failure === "timeout"
+                  ? "Crib control request timed out"
+                  : failure === "close"
+                    ? "Crib control connection closed"
+                    : expect.stringContaining("rejected"),
+            },
+          });
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          release.resolve();
+          await controller.disconnect();
+          await pending;
+        }
+      });
+    }
+
+    it(`still waits for publication after an accepted ${operation} response`, async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { controller, entered, release, connections, published } =
+        fixture("publish");
+      let settled = false;
+      const pending = outcome(
+        operation === "control"
+          ? controller.setSoundLevel(50)
+          : controller.getState(),
+      ).then((value) => {
+        settled = true;
+        return value;
+      });
+      try {
+        await entered.promise;
+        const { topic, body } = published[0]!;
+        connections[0]!.emit(
+          "message",
+          `${topic}/accepted`,
+          Buffer.from(JSON.stringify(body)),
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(settled).toBe(false);
+        release.resolve();
+        expect(await pending).toHaveProperty("value");
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        release.resolve();
+        await controller.disconnect();
+      }
+    });
+  }
+
+  it("advances queued controls after timeout and ignores the late response", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { controller, entered, release, published } = fixture("publish");
+    let firstResult: unknown;
+    let secondResult: unknown;
+    const first = outcome(controller.setSoundLevel(10)).then((value) => {
+      firstResult = value;
+    });
+    const second = outcome(controller.setSoundLevel(50)).then((value) => {
+      secondResult = value;
+    });
+    try {
+      await entered.promise;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(firstResult).toMatchObject({
+        error: { message: "Crib control request timed out" },
+      });
+      expect(secondResult).toMatchObject({ value: { soundLevel: 50 } });
+      expect(published).toHaveLength(2);
+      release.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await expect(controller.lock()).resolves.toMatchObject({
+        soundLevel: 50,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      release.resolve();
+      await controller.disconnect();
+      await Promise.all([first, second]);
+    }
+  });
+
+  it("handles a late publication failure after delivering the timeout", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { controller, entered, release } = fixture("publish");
+    let result: unknown;
+    const pending = outcome(controller.setSoundLevel(10)).then((value) => {
+      result = value;
+    });
+    try {
+      await entered.promise;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(result).toMatchObject({
+        error: { message: "Crib control request timed out" },
+      });
+      const timeoutResult = result;
+      release.reject(new Error("Late MQTT publication failure"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(result).toBe(timeoutResult);
+      await expect(controller.lock()).resolves.toMatchObject({ soundLevel: 0 });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      release.resolve();
+      await controller.disconnect();
+      await pending;
+    }
+  });
+
+  for (const synchronous of [false, true]) {
+    it(`cleans up after a ${synchronous ? "synchronous" : "rejected"} publish failure`, async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { controller, connections } = fixture();
+      await controller.connect();
+      const connection = connections[0]!;
+      const failure = new Error("MQTT publication failed");
+      const publish = vi.spyOn(connection, "publishAsync");
+      if (synchronous) {
+        publish.mockImplementationOnce((topic, payload) => {
+          connection.emit("message", `${topic}/rejected`, Buffer.from(payload));
+          throw failure;
+        });
+      } else {
+        publish.mockRejectedValueOnce(failure);
+      }
+      try {
+        await expect(controller.setSoundLevel(10)).rejects.toBe(failure);
+        expect(vi.getTimerCount()).toBe(0);
+        await expect(controller.lock()).resolves.toMatchObject({
+          soundLevel: 0,
+        });
+        await vi.advanceTimersByTimeAsync(1_000);
+      } finally {
+        await controller.disconnect();
+      }
+    });
+  }
 });

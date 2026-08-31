@@ -433,15 +433,18 @@ export class CradlewiseController {
     });
     void response.catch(() => undefined);
     try {
-      await withinLifecycle(
-        signal,
-        connection.publishAsync(
-          base,
-          JSON.stringify({ ...body, clientToken: token }),
-          { qos: 0 },
+      const [, document] = await Promise.all([
+        withinLifecycle(
+          signal,
+          connection.publishAsync(
+            base,
+            JSON.stringify({ ...body, clientToken: token }),
+            { qos: 0 },
+          ),
         ),
-      );
-      return await withinLifecycle(signal, response);
+        withinLifecycle(signal, response),
+      ]);
+      return document;
     } finally {
       const pending = this.#pendingShadowRequests.get(token);
       if (pending) {
