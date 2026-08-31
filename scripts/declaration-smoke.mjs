@@ -13,10 +13,13 @@ try {
     `import {
   AppConfig,
   CradlewiseClient,
+  CradlewiseController,
   isTrustedDiscoveredAppConfig,
   type BabyProfile,
   type CradlePhoto,
   type CradleData,
+  type CradleControlResult,
+  type CradleControlState,
   type CradlewiseApiErrorOptions,
   type InboxBooleanGroups,
   type InboxMessagesResponse,
@@ -26,6 +29,11 @@ try {
 import { cradlewiseToolcraftRoot } from "@kamilio/cradlewise-sdk/toolcraft";
 
 declare const client: CradlewiseClient;
+declare const controller: CradlewiseController;
+const controlResult: Promise<CradleControlResult> = controller.lock(15);
+const controlState: Promise<CradleControlState> = controller.getState();
+void controlResult;
+void controlState;
 declare const appConfig: AppConfig;
 const profile: BabyProfile = { baby_id: "baby" };
 const cradle: CradleData = {

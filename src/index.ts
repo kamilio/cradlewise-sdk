@@ -7,6 +7,7 @@ export { CradlewiseAuth } from "./auth.js";
 export { CradlewiseClient, formatApiDate } from "./client.js";
 export { CradlewiseController } from "./controls.js";
 export type {
+  CradleControlResult,
   CradleControlState,
   CradlewiseControllerOptions,
   StartSoothingLevelsOptions,

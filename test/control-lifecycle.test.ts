@@ -265,7 +265,10 @@ describe("controller disconnect lifecycle", () => {
       release.resolve();
       expect(settledBeforeRelease).toBe(true);
       expect(await pending).toHaveProperty("error");
-      await expect(controller.lock()).resolves.toMatchObject({ soundLevel: 0 });
+      await expect(controller.lock()).resolves.toEqual({
+        locked: true,
+        lockMinutes: 30,
+      });
       expect(published).toHaveLength(2);
     } finally {
       release.resolve();
@@ -323,9 +326,9 @@ describe("controller disconnect lifecycle", () => {
     expect(await cancelled).toHaveProperty("error");
     expect(await fresh).toMatchObject({ value: { soundLevel: 50 } });
     connections[0]?.emit("close");
-    await expect(controller.lock()).resolves.toMatchObject({
-      soundLevel: 50,
+    await expect(controller.lock()).resolves.toEqual({
       locked: true,
+      lockMinutes: 30,
     });
     expect(mqttConnect).toHaveBeenCalledTimes(2);
     expect(connections[0]?.endCalls).toBe(1);
@@ -512,8 +515,9 @@ describe("controller response deadlines during publication", () => {
       expect(published).toHaveLength(2);
       release.resolve();
       await new Promise<void>((resolve) => setImmediate(resolve));
-      await expect(controller.lock()).resolves.toMatchObject({
-        soundLevel: 50,
+      await expect(controller.lock()).resolves.toEqual({
+        locked: true,
+        lockMinutes: 30,
       });
       expect(vi.getTimerCount()).toBe(0);
     } finally {
@@ -540,7 +544,10 @@ describe("controller response deadlines during publication", () => {
       release.reject(new Error("Late MQTT publication failure"));
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(result).toBe(timeoutResult);
-      await expect(controller.lock()).resolves.toMatchObject({ soundLevel: 0 });
+      await expect(controller.lock()).resolves.toEqual({
+        locked: true,
+        lockMinutes: 30,
+      });
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       release.resolve();
@@ -598,8 +605,9 @@ describe("controller response deadlines during publication", () => {
       try {
         await expect(controller.setSoundLevel(10)).rejects.toBe(failure);
         expect(vi.getTimerCount()).toBe(0);
-        await expect(controller.lock()).resolves.toMatchObject({
-          soundLevel: 0,
+        await expect(controller.lock()).resolves.toEqual({
+          locked: true,
+          lockMinutes: 30,
         });
         await vi.advanceTimersByTimeAsync(1_000);
       } finally {

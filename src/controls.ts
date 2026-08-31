@@ -45,6 +45,8 @@ export interface CradleControlState {
   shadowVersion?: number;
 }
 
+export type CradleControlResult = Partial<CradleControlState>;
+
 export interface CradlewiseControllerOptions {
   registrationId?: string;
   operationTimeoutMs?: number;
@@ -101,16 +103,6 @@ interface PendingShadowRequest {
   timeout: ReturnType<typeof setTimeout>;
 }
 
-const EMPTY_CONTROL_STATE: CradleControlState = Object.freeze({
-  active: false,
-  bounceOn: false,
-  bounceLevel: 0,
-  soundOn: false,
-  soundLevel: 0,
-  locked: false,
-  lockMinutes: 30,
-});
-
 export class CradlewiseController {
   readonly auth: CradlewiseAuth;
   readonly cradle: Cradle;
@@ -128,7 +120,6 @@ export class CradlewiseController {
   #shadowSubscription: Promise<void> | undefined;
   #shadowSubscriptionConnection: CradlewiseMqttConnection | undefined;
   readonly #pendingShadowRequests = new Map<string, PendingShadowRequest>();
-  #lastState: CradleControlState = EMPTY_CONTROL_STATE;
   #updateQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -210,13 +201,12 @@ export class CradlewiseController {
       await this.#shadowRequest("get", {}, signal),
     );
     assertActive(signal);
-    this.#lastState = state;
     return state;
   }
 
   async startSoothing(
     options: StartSoothingOptions,
-  ): Promise<CradleControlState> {
+  ): Promise<CradleControlResult> {
     if (!isPlainObject(options))
       throw new TypeError("options must be an object");
     const bounceLevel = requireLevel(options.bounceLevel, "bounceLevel");
@@ -235,7 +225,6 @@ export class CradlewiseController {
     };
     return this.#updateState(desired, (state) => ({
       ...state,
-      active: bounceLevel > 0 || soundLevel > 0,
       bounceOn: bounceLevel > 0,
       bounceLevel,
       soundOn: soundLevel > 0,
@@ -245,7 +234,7 @@ export class CradlewiseController {
     }));
   }
 
-  async stop(): Promise<CradleControlState> {
+  async stop(): Promise<CradleControlResult> {
     return this.#updateState(
       {
         actuator: { on: false },
@@ -253,7 +242,6 @@ export class CradlewiseController {
       },
       (state) => ({
         ...state,
-        active: false,
         bounceOn: false,
         soundOn: false,
       }),
@@ -262,7 +250,7 @@ export class CradlewiseController {
 
   async startSoothingLevels(
     options: StartSoothingLevelsOptions,
-  ): Promise<CradleControlState> {
+  ): Promise<CradleControlResult> {
     if (!isPlainObject(options))
       throw new TypeError("options must be an object");
     const bounceLevel = requireSoothingLevel(
@@ -288,7 +276,6 @@ export class CradlewiseController {
     };
     return this.#updateState(desired, (state) => ({
       ...state,
-      active: bounceLevel > 0 || soundLevel > 0,
       bounceOn: bounceLevel > 0,
       soundOn: soundLevel > 0,
       bounceIntensityLevel: bounceLevel,
@@ -298,33 +285,31 @@ export class CradlewiseController {
     }));
   }
 
-  async setBounceLevel(level: number): Promise<CradleControlState> {
+  async setBounceLevel(level: number): Promise<CradleControlResult> {
     const bounceLevel = requireLevel(level, "level");
     return this.#updateState(
       { actuator: { on: bounceLevel > 0, amplitude: bounceLevel } },
       (state) => ({
         ...state,
-        active: bounceLevel > 0 || state.soundOn,
         bounceOn: bounceLevel > 0,
         bounceLevel,
       }),
     );
   }
 
-  async setSoundLevel(level: number): Promise<CradleControlState> {
+  async setSoundLevel(level: number): Promise<CradleControlResult> {
     const soundLevel = requireLevel(level, "level");
     return this.#updateState(
       { soundSynth: { play: soundLevel > 0, volume: soundLevel } },
       (state) => ({
         ...state,
-        active: state.bounceOn || soundLevel > 0,
         soundOn: soundLevel > 0,
         soundLevel,
       }),
     );
   }
 
-  async setBounceIntensityLevel(level: number): Promise<CradleControlState> {
+  async setBounceIntensityLevel(level: number): Promise<CradleControlResult> {
     const bounceLevel = requireSoothingLevel(level, "level");
     return this.#updateState(
       bounceLevel > 0
@@ -332,14 +317,13 @@ export class CradlewiseController {
         : { actuator: { on: false } },
       (state) => ({
         ...state,
-        active: bounceLevel > 0 || state.soundOn,
         bounceOn: bounceLevel > 0,
         bounceIntensityLevel: bounceLevel,
       }),
     );
   }
 
-  async setSoundIntensityLevel(level: number): Promise<CradleControlState> {
+  async setSoundIntensityLevel(level: number): Promise<CradleControlResult> {
     const soundLevel = requireSoothingLevel(level, "level");
     return this.#updateState(
       soundLevel > 0
@@ -347,14 +331,13 @@ export class CradlewiseController {
         : { soundSynth: { play: false } },
       (state) => ({
         ...state,
-        active: state.bounceOn || soundLevel > 0,
         soundOn: soundLevel > 0,
         soundIntensityLevel: soundLevel,
       }),
     );
   }
 
-  async setMaxBouncePercent(percent: number): Promise<CradleControlState> {
+  async setMaxBouncePercent(percent: number): Promise<CradleControlResult> {
     const maxBouncePercent = requirePercent(percent, "percent");
     return this.#updateState({ maxBounceLimit: maxBouncePercent }, (state) => ({
       ...state,
@@ -362,7 +345,7 @@ export class CradlewiseController {
     }));
   }
 
-  async setMaxSoundPercent(percent: number): Promise<CradleControlState> {
+  async setMaxSoundPercent(percent: number): Promise<CradleControlResult> {
     const maxSoundPercent = requirePercent(percent, "percent");
     return this.#updateState({ maxVolumeLimit: maxSoundPercent }, (state) => ({
       ...state,
@@ -370,7 +353,7 @@ export class CradlewiseController {
     }));
   }
 
-  async lock(minutes = 30): Promise<CradleControlState> {
+  async lock(minutes = 30): Promise<CradleControlResult> {
     const lockMinutes = requireLockMinutes(minutes);
     return this.#updateState(
       { autoModeLockDuration: lockMinutes, autoModeLockOn: true },
@@ -378,7 +361,7 @@ export class CradlewiseController {
     );
   }
 
-  async unlock(): Promise<CradleControlState> {
+  async unlock(): Promise<CradleControlResult> {
     return this.#updateState({ autoModeLockOn: false }, (state) => ({
       ...state,
       locked: false,
@@ -387,15 +370,22 @@ export class CradlewiseController {
 
   async #updateState(
     desired: JsonObject,
-    project: (state: CradleControlState) => CradleControlState,
-  ): Promise<CradleControlState> {
+    project: (state: CradleControlResult) => CradleControlResult,
+  ): Promise<CradleControlResult> {
     const signal = this.#lifecycle.signal;
     const update = this.#updateQueue.then(async () => {
       assertActive(signal);
-      await this.#shadowRequest("update", { state: { desired } }, signal);
+      const response = await this.#shadowRequest(
+        "update",
+        { state: { desired } },
+        signal,
+      );
       assertActive(signal);
-      const state = project(this.#lastState);
-      this.#lastState = state;
+      const state = project(controlResultFromShadow(response));
+      if (state.bounceOn === true || state.soundOn === true)
+        state.active = true;
+      else if (state.bounceOn === false && state.soundOn === false)
+        state.active = false;
       return state;
     });
     this.#updateQueue = update.then(
@@ -770,6 +760,52 @@ async function downloadS3Object(
     );
   }
   return text;
+}
+
+function controlResultFromShadow(shadow: ShadowDocument): CradleControlResult {
+  const reported = snapshotObject(shadow.state?.reported);
+  const actuator = snapshotObject(reported.actuator);
+  const soundSynth = snapshotObject(reported.soundSynth);
+  const fields: {
+    [Key in keyof CradleControlState]?: CradleControlState[Key] | undefined;
+  } = {
+    bounceOn: typeof actuator.on === "boolean" ? actuator.on : undefined,
+    soundOn: typeof soundSynth.play === "boolean" ? soundSynth.play : undefined,
+    bounceLevel: observedControlNumber(actuator.amplitude, 0, MAX_LEVEL),
+    soundLevel: observedControlNumber(soundSynth.volume, 0, MAX_LEVEL),
+    bounceIntensityLevel: safeSoothingLevel(reported.bounceLevel),
+    soundIntensityLevel: safeSoothingLevel(reported.musicLevel),
+    maxBouncePercent: safePercent(reported.maxBounceLimit),
+    maxSoundPercent: safePercent(reported.maxVolumeLimit),
+    locked:
+      typeof reported.autoModeLockOn === "boolean"
+        ? reported.autoModeLockOn
+        : undefined,
+    lockMinutes: observedControlNumber(
+      reported.autoModeLockDuration,
+      1,
+      MAX_LOCK_MINUTES,
+    ),
+    shadowVersion: Number.isSafeInteger(shadow.version)
+      ? shadow.version
+      : undefined,
+  };
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined),
+  );
+}
+
+function observedControlNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): number | undefined {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= minimum &&
+    value <= maximum
+    ? value
+    : undefined;
 }
 
 function controlStateFromShadow(shadow: ShadowDocument): CradleControlState {

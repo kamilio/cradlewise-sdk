@@ -1,11 +1,34 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppConfig } from "../src/config.js";
 import { CradlewiseController } from "../src/controls.js";
 import { Cradle } from "../src/models.js";
 
+const controllers: CradlewiseController[] = [];
+
+beforeEach(() => {
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    new Error("Unexpected application request"),
+  );
+});
+
+afterEach(async () => {
+  await Promise.all(
+    controllers.splice(0).map((controller) => controller.disconnect()),
+  );
+  expect(globalThis.fetch).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});
+
 function createHarness(
-  options: { rejectFirst?: boolean; respond?: boolean } = {},
+  options: {
+    rejectFirst?: boolean;
+    respond?: boolean;
+    response?: (
+      topic: string,
+      body: Record<string, unknown>,
+    ) => Record<string, unknown>;
+  } = {},
 ) {
   const events = new EventEmitter();
   const published: Array<{ topic: string; body: Record<string, unknown> }> = [];
@@ -31,7 +54,12 @@ function createHarness(
           events.emit(
             "message",
             `${topic}/${options.rejectFirst && responseCount === 1 ? "rejected" : "accepted"}`,
-            Buffer.from(JSON.stringify({ clientToken: body.clientToken })),
+            Buffer.from(
+              JSON.stringify({
+                clientToken: body.clientToken,
+                ...options.response?.(topic, body),
+              }),
+            ),
           );
         });
       }
@@ -124,6 +152,7 @@ function createHarness(
       operationTimeoutMs: 1_000,
     },
   );
+  controllers.push(controller);
   return {
     controller,
     connection,
@@ -213,5 +242,288 @@ describe("CradlewiseController controls", () => {
     await expect(first).rejects.toThrow("rejected the control request");
     await expect(second).resolves.toMatchObject({ bounceIntensityLevel: 5 });
     expect(published).toHaveLength(2);
+  });
+});
+
+function reportedState(active: boolean) {
+  return {
+    actuator: { on: active, amplitude: 30 },
+    soundSynth: { play: active, volume: 40 },
+    bounceLevel: 2,
+    musicLevel: 1,
+    maxBounceLimit: 70,
+    maxVolumeLimit: 80,
+    autoModeLockOn: false,
+    autoModeLockDuration: 30,
+  };
+}
+
+describe("control result observations", () => {
+  for (const duration of [15, 0, "15"]) {
+    it(`retains only valid observed lock durations while unlocking: ${JSON.stringify(duration)}`, async () => {
+      const { controller } = createHarness({
+        response: () => ({
+          state: {
+            reported: { autoModeLockOn: true, autoModeLockDuration: duration },
+          },
+        }),
+      });
+      await expect(controller.unlock()).resolves.toEqual({
+        locked: false,
+        ...(duration === 15 ? { lockMinutes: 15 } : {}),
+      });
+    });
+  }
+  for (const preloaded of [undefined, true, false]) {
+    it(`uses accepted reported fields instead of ${String(preloaded)} cached activity`, async () => {
+      const active = preloaded !== true;
+      const { controller, published } = createHarness({
+        response: (topic) => ({
+          version: topic.endsWith("/get") ? 3 : 4,
+          state: {
+            reported: reportedState(
+              topic.endsWith("/get") ? preloaded === true : active,
+            ),
+          },
+        }),
+      });
+      if (preloaded !== undefined) await controller.getState();
+      await expect(controller.lock(15)).resolves.toEqual({
+        active,
+        bounceOn: active,
+        soundOn: active,
+        bounceLevel: 30,
+        soundLevel: 40,
+        bounceIntensityLevel: 3,
+        soundIntensityLevel: 2,
+        maxBouncePercent: 70,
+        maxSoundPercent: 80,
+        locked: true,
+        lockMinutes: 15,
+        shadowVersion: 4,
+      });
+      expect(
+        published.filter(({ topic }) => topic.endsWith("/update")),
+      ).toHaveLength(1);
+      expect(published.at(-1)?.body.state).toEqual({
+        desired: { autoModeLockDuration: 15, autoModeLockOn: true },
+      });
+    });
+  }
+
+  const narrowOperations: Array<
+    [string, (controller: CradlewiseController) => Promise<unknown>, object]
+  > = [
+    [
+      "lock",
+      (controller) => controller.lock(15),
+      { locked: true, lockMinutes: 15 },
+    ],
+    ["unlock", (controller) => controller.unlock(), { locked: false }],
+    [
+      "max bounce",
+      (controller) => controller.setMaxBouncePercent(70),
+      { maxBouncePercent: 70 },
+    ],
+    [
+      "max sound",
+      (controller) => controller.setMaxSoundPercent(80),
+      { maxSoundPercent: 80 },
+    ],
+  ];
+  for (const [name, operation, expected] of narrowOperations) {
+    for (const shape of ["absent", "desired", "empty reported"]) {
+      it(`${name} omits unknown fields with ${shape} response state`, async () => {
+        const { controller } = createHarness({
+          response: (_topic, body) => ({
+            version: 7,
+            ...(shape === "desired"
+              ? { state: body.state }
+              : shape === "empty reported"
+                ? { state: { reported: {} } }
+                : {}),
+          }),
+        });
+        await expect(operation(controller)).resolves.toEqual({
+          ...expected,
+          shadowVersion: 7,
+        });
+      });
+    }
+  }
+
+  it("does not carry a previous observation or optimistic command into a lock-only result", async () => {
+    const { controller } = createHarness({
+      response: (topic) =>
+        topic.endsWith("/get")
+          ? { state: { reported: reportedState(true) } }
+          : {},
+    });
+    await expect(controller.getState()).resolves.toMatchObject({
+      active: true,
+      soundLevel: 40,
+    });
+    await controller.setSoundLevel(90);
+    await expect(controller.lock(15)).resolves.toEqual({
+      locked: true,
+      lockMinutes: 15,
+    });
+  });
+
+  const partialObservations: Array<[string, object, object]> = [
+    [
+      "sound on",
+      { soundSynth: { play: true, volume: 40 } },
+      { active: true, soundOn: true, soundLevel: 40 },
+    ],
+    ["sound off alone", { soundSynth: { play: false } }, { soundOn: false }],
+    [
+      "both off",
+      { actuator: { on: false }, soundSynth: { play: false } },
+      { active: false, bounceOn: false, soundOn: false },
+    ],
+    [
+      "zero and upper limits",
+      {
+        actuator: { amplitude: 0 },
+        soundSynth: { volume: 99 },
+        bounceLevel: 0,
+        musicLevel: 4,
+        maxBounceLimit: 0,
+        maxVolumeLimit: 100,
+      },
+      {
+        bounceLevel: 0,
+        soundLevel: 99,
+        bounceIntensityLevel: 1,
+        soundIntensityLevel: 5,
+        maxBouncePercent: 0,
+        maxSoundPercent: 100,
+      },
+    ],
+    [
+      "invalid fields",
+      {
+        actuator: { on: "false", amplitude: -1 },
+        soundSynth: { play: null, volume: 100 },
+        bounceLevel: 5,
+        musicLevel: -1,
+        maxBounceLimit: 101,
+        maxVolumeLimit: null,
+      },
+      {},
+    ],
+  ];
+  for (const [name, reported, expected] of partialObservations) {
+    it(`retains only supplied valid observations: ${name}`, async () => {
+      const { controller } = createHarness({
+        response: () => ({ state: { reported } }),
+      });
+      await expect(controller.lock(15)).resolves.toEqual({
+        ...expected,
+        locked: true,
+        lockMinutes: 15,
+      });
+    });
+  }
+
+  const levelOperations: Array<
+    [string, (controller: CradlewiseController) => Promise<unknown>, object]
+  > = [
+    [
+      "bounce off",
+      (controller) => controller.setBounceLevel(0),
+      { bounceOn: false, bounceLevel: 0 },
+    ],
+    [
+      "sound off",
+      (controller) => controller.setSoundLevel(0),
+      { soundOn: false, soundLevel: 0 },
+    ],
+    [
+      "bounce intensity off",
+      (controller) => controller.setBounceIntensityLevel(0),
+      { bounceOn: false, bounceIntensityLevel: 0 },
+    ],
+    [
+      "sound intensity off",
+      (controller) => controller.setSoundIntensityLevel(0),
+      { soundOn: false, soundIntensityLevel: 0 },
+    ],
+    [
+      "bounce on",
+      (controller) => controller.setBounceLevel(30),
+      { active: true, bounceOn: true, bounceLevel: 30 },
+    ],
+    [
+      "sound on",
+      (controller) => controller.setSoundLevel(40),
+      { active: true, soundOn: true, soundLevel: 40 },
+    ],
+    [
+      "bounce intensity on",
+      (controller) => controller.setBounceIntensityLevel(3),
+      { active: true, bounceOn: true, bounceIntensityLevel: 3 },
+    ],
+    [
+      "sound intensity on",
+      (controller) => controller.setSoundIntensityLevel(2),
+      { active: true, soundOn: true, soundIntensityLevel: 2 },
+    ],
+    [
+      "stop",
+      (controller) => controller.stop(),
+      { active: false, bounceOn: false, soundOn: false },
+    ],
+    [
+      "start",
+      (controller) =>
+        controller.startSoothing({ bounceLevel: 30, soundLevel: 40 }),
+      {
+        active: true,
+        bounceOn: true,
+        bounceLevel: 30,
+        soundOn: true,
+        soundLevel: 40,
+        locked: false,
+      },
+    ],
+    [
+      "start intensity",
+      (controller) =>
+        controller.startSoothingLevels({ bounceLevel: 3, soundLevel: 0 }),
+      {
+        active: true,
+        bounceOn: true,
+        bounceIntensityLevel: 3,
+        soundOn: false,
+        soundIntensityLevel: 0,
+        locked: false,
+      },
+    ],
+  ];
+  for (const [name, operation, expected] of levelOperations) {
+    it(`projects ${name} without inventing untouched state`, async () => {
+      await expect(operation(createHarness().controller)).resolves.toEqual(
+        expected,
+      );
+    });
+  }
+
+  it("derives activity from untouched reported fields and the acknowledged change", async () => {
+    const { controller } = createHarness({
+      response: () => ({ state: { reported: reportedState(true) } }),
+    });
+    await expect(controller.setSoundLevel(0)).resolves.toMatchObject({
+      active: true,
+      bounceOn: true,
+      soundOn: false,
+      soundLevel: 0,
+    });
+    await expect(controller.stop()).resolves.toMatchObject({
+      active: false,
+      bounceOn: false,
+      soundOn: false,
+    });
   });
 });
