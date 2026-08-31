@@ -215,6 +215,15 @@ describe("controller disconnect lifecycle", () => {
     expect(mqttConnect).not.toHaveBeenCalled();
   });
 
+  it("cancels a pending connect call even when its transport was already available", async () => {
+    const { controller, mqttConnect } = fixture();
+    await controller.connect();
+    const pending = outcome(controller.connect());
+    await controller.disconnect();
+    expect(await pending).toHaveProperty("error");
+    expect(mqttConnect).toHaveBeenCalledTimes(1);
+  });
+
   it("cancels active and queued controls without reconnecting", async () => {
     const { controller, published, mqttConnect, setRespond } = fixture();
     setRespond(false);

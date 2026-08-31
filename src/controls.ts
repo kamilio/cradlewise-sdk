@@ -170,7 +170,9 @@ export class CradlewiseController {
   }
 
   async connect(): Promise<void> {
-    await this.#getConnection(this.#lifecycle.signal);
+    const signal = this.#lifecycle.signal;
+    await this.#getConnection(signal);
+    assertActive(signal);
   }
 
   async disconnect(): Promise<void> {
